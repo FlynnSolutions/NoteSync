@@ -1,0 +1,25 @@
+# Run the loop on any container host (or locally to test first). UNVERIFIED — see HOSTING.md.
+# Build context is the repo root so the image can copy the code.
+#   cp ~/.config/rclone/rclone.conf ./rclone.conf   # after `rclone config` (gdrive remote)
+#   echo "ANTHROPIC_API_KEY=sk-...\nDOCS_REPO=git@github.com:you/notes.git" > ./loop.env
+#   docker compose up --build
+services:
+  supernote-sync:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: ./loop.env
+    environment:
+      LOOP_INTERVAL: "300"
+    # FUSE access for the rclone mount.
+    cap_add: ["SYS_ADMIN"]
+    devices: ["/dev/fuse"]
+    security_opt: ["apparmor:unconfined"]
+    volumes:
+      - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
+      # Persist the read-once ledger across restarts (else re-uploaded ink reprocesses).
+      - sync-state:/app/processed_marks.json
+    restart: unless-stopped
+
+volumes:
+  sync-state:

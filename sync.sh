@@ -17,6 +17,7 @@ set -euo pipefail
 # --- config ---------------------------------------------------------------
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY="$HERE/.venv/bin/python"
+[ -x "$PY" ] || PY="python3"   # fall back to system python (e.g. in a container)
 # Resolve a setting via config.py (config.toml / SUPERNOTE_* env / auto-detected
 # Google Drive for Desktop mount). The device mirrors its folder tree to a Supernote/
 # folder in Drive; the sync is BIDIRECTIONAL (writing Document/ pushes to the device,

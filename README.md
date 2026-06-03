@@ -135,9 +135,10 @@ Design notes and decisions live in [`docs/`](./docs/).
 
 ## Status
 
-The local check-out/check-in loop is complete and battle-tested. Cloud autonomy
-(running unattended in AWS so it works with the laptop shut) is in progress — see
-[`docs/04-status.md`](./docs/04-status.md).
+The local check-out/check-in loop is complete and battle-tested. Running it unattended
+(so it works with the laptop shut) is designed but not yet deployed — a persistent
+container that rclone-mounts Drive and runs the loop; see
+[`deploy/HOSTING.md`](./deploy/HOSTING.md) and [`docs/04-status.md`](./docs/04-status.md).
 
 ## License
 
