@@ -23,6 +23,31 @@ def register_fonts(pdf: FPDF) -> None:
     pdf.add_font(FONT, "I", str(config.font_italic()))
 
 
+# --- checklist checkboxes (shared by the renderers) -----------------------
+# A markdown task item `- [x] text` carries a single-char marker. Map each known
+# marker to the glyph drawn inside the box + a human label (for the legend). Any doc's
+# checkboxes render as real boxes, no config needed; `format: checklist` adds the legend.
+CHECK_STATES = {
+    " ": ("", "to do"),
+    "~": ("/", "in progress"),
+    "x": ("X", "done"),
+    "!": ("!", "deferred"),
+    "-": ("-", "dropped"),
+}
+
+
+def draw_checkbox(pdf: FPDF, x: float, y: float, size: float, marker: str) -> None:
+    """Draw a checklist checkbox — a square with the marker's state glyph — at (x, y)."""
+    glyph = CHECK_STATES.get(marker, ("", ""))[0]
+    pdf.set_draw_color(0)
+    pdf.set_line_width(0.3)
+    pdf.rect(x, y, size, size)
+    if glyph:
+        pdf.set_font(FONT, "B", size * 2.2)
+        pdf.set_xy(x, y - 0.5)
+        pdf.cell(size, size, glyph, align="C")
+
+
 # Map the unicode/emoji we emit down to latin-1/ASCII so nothing renders as a blank box
 # (the embedded font has no colour-emoji glyphs). The only invisible code points
 # (non-breaking space, emoji variation selector) are commented inline.

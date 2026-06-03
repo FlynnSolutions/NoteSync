@@ -41,4 +41,4 @@ layer, interpreted by Claude, and 3-way-merged back into the source Markdown. Se
   reprocess — don't "fix" that by deleting the mark.
 - The renderer maps unicode/emoji to latin-1 (`common.py:sanitize`); it has no emoji glyphs.
 - Roadmap and open items: [docs/04-status.md](./docs/04-status.md) and
-  [docs/05-backlog.md](./docs/05-backlog.md).
+  [docs/backlog.md](./docs/backlog.md).

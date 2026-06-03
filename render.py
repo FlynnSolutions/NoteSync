@@ -18,7 +18,16 @@ from datetime import datetime
 
 from fpdf import FPDF
 
-from common import FONT, MARGIN_MM, PAGE_H_MM, PAGE_W_MM, register_fonts, sanitize
+from common import (
+    CHECK_STATES,
+    FONT,
+    MARGIN_MM,
+    PAGE_H_MM,
+    PAGE_W_MM,
+    draw_checkbox,
+    register_fonts,
+    sanitize,
+)
 
 HEADING_SIZE = {1: 15, 2: 12.5, 3: 11, 4: 10, 5: 9.5, 6: 9}
 BODY = 8.5
@@ -32,7 +41,25 @@ _SEP_ROW = re.compile(r"^\s*\|?[\s:\-\|]+\|?\s*$")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 _HR = re.compile(r"^\s*([-*_])\1{2,}\s*$")
 _LIST = re.compile(r"^(\s*)([-*+]|\d+\.)\s+(.*)$")
+_CHECKBOX = re.compile(r"^\[(.)\]\s*(.*)$")  # the `[x] text` inside a task list item
 _BLOCK_START = re.compile(r"^(#{1,6}\s|\s*([-*+]|\d+\.)\s|>|```)")
+# Frontmatter: an optional leading `---` ... `---` block of `key: value` lines.
+_FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n?", re.S)
+
+
+def _parse_frontmatter(md_text: str) -> tuple[dict[str, str], str]:
+    """Split off a leading `---` frontmatter block. Returns (metadata, body). The block
+    is stripped from the body, so it never renders into the PDF (it's instructions, not
+    content). Simple flat `key: value` parsing — no YAML dependency."""
+    m = _FRONTMATTER.match(md_text)
+    if not m:
+        return {}, md_text
+    meta = {}
+    for line in m.group(1).splitlines():
+        if ":" in line and not line.lstrip().startswith("#"):
+            key, val = line.split(":", 1)
+            meta[key.strip().lower()] = val.strip()
+    return meta, md_text[m.end():]
 
 
 def _inline(text: str) -> str:
@@ -44,15 +71,19 @@ def _inline(text: str) -> str:
 
 
 class DocPDF(FPDF):
-    def __init__(self, source_label: str = ""):
+    def __init__(self, source_label: str = "", doc_format: str = "notes"):
         super().__init__(orientation="P", unit="mm", format=(PAGE_W_MM, PAGE_H_MM))
         self.source_label = source_label
+        self.doc_format = doc_format
 
     def footer(self):
         self.set_y(-6)
         self.set_font(FONT, "I", 6)
         self.set_text_color(150)
-        self.cell(0, 4, sanitize(f"{self.source_label}    -  pg {self.page_no()}"), align="C")
+        # `book` reads cleaner with just a page number; everything else shows the source.
+        label = "" if self.doc_format == "book" else self.source_label
+        text = f"{label}    -  pg {self.page_no()}" if label else f"pg {self.page_no()}"
+        self.cell(0, 4, sanitize(text), align="C")
         self.set_text_color(0)
 
 
@@ -152,9 +183,9 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
         if lm:
             depth = len(lm.group(1)) // 2
             indent = MARGIN_MM + depth * 5
-            ordered = lm.group(2) not in ("-", "*", "+")
-            marker = (lm.group(2) + " ") if ordered else "- "
-            parts = [lm.group(3)]
+            cb = _CHECKBOX.match(lm.group(3))            # task item: `- [x] text`?
+            is_check = bool(cb) and cb.group(1) in CHECK_STATES
+            parts = [cb.group(2) if is_check else lm.group(3)]
             i += 1
             # absorb indented continuation lines (markdown lazy continuation) so a
             # source-wrapped bullet renders as one block, not a stray paragraph.
@@ -162,11 +193,23 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
                 parts.append(lines[i].strip())
                 i += 1
             pdf.set_font(FONT, "", BODY)
-            pdf.set_left_margin(indent)      # wrapped lines align under the indent
-            pdf.set_x(indent)
-            pdf.multi_cell(PAGE_W_MM - indent - MARGIN_MM, 4.4,
-                           sanitize(marker) + (_inline(" ".join(parts)) or " "),
-                           markdown=True, align="L")
+            body_text = _inline(" ".join(parts)) or " "
+            if is_check:
+                # Draw a real checkbox; align the (possibly wrapping) text past it.
+                box, y = 3.0, pdf.get_y()
+                draw_checkbox(pdf, indent, y + 0.5, box, cb.group(1))
+                pdf.set_font(FONT, "", BODY)   # draw_checkbox left the font bold for the glyph
+                text_x = indent + box + 1.8
+                pdf.set_left_margin(text_x)
+                pdf.set_xy(text_x, y)
+                pdf.multi_cell(PAGE_W_MM - text_x - MARGIN_MM, 4.4, body_text,
+                               markdown=True, align="L")
+            else:
+                marker = (lm.group(2) + " ") if lm.group(2) not in ("-", "*", "+") else "- "
+                pdf.set_left_margin(indent)  # wrapped lines align under the indent
+                pdf.set_x(indent)
+                pdf.multi_cell(PAGE_W_MM - indent - MARGIN_MM, 4.4,
+                               sanitize(marker) + body_text, markdown=True, align="L")
             pdf.set_left_margin(MARGIN_MM)   # restore
             continue
 
@@ -202,8 +245,8 @@ def _split_sections(lines: list[str]) -> list[list[str]]:
     return sections
 
 
-def _new_pdf() -> DocPDF:
-    pdf = DocPDF()
+def _new_pdf(doc_format: str = "notes") -> DocPDF:
+    pdf = DocPDF(doc_format=doc_format)
     register_fonts(pdf)
     pdf.set_auto_page_break(auto=True, margin=BOTTOM_MARGIN_MM)
     pdf.set_margins(MARGIN_MM, TOP_MARGIN_MM, MARGIN_MM)
@@ -213,10 +256,21 @@ def _new_pdf() -> DocPDF:
     return pdf
 
 
-def _section_height(section: list[str], usable: float) -> float | None:
+def _render_legend(pdf: DocPDF, usable: float) -> None:
+    """A faint one-line status key, for `format: checklist` docs."""
+    key = "   ".join(f"[{m if m.strip() else ' '}] {label}"
+                      for m, (_glyph, label) in CHECK_STATES.items())
+    pdf.set_font(FONT, "I", 6.5)
+    pdf.set_text_color(120)
+    pdf.multi_cell(usable, 3.4, sanitize(key))
+    pdf.set_text_color(0)
+    pdf.ln(1.5)
+
+
+def _section_height(section: list[str], usable: float, doc_format: str = "notes") -> float | None:
     """Render the section into a throwaway PDF to measure its height.
     Returns None if it's taller than one page (can't be kept together)."""
-    scratch = _new_pdf()
+    scratch = _new_pdf(doc_format)
     scratch.add_page()
     start = scratch.get_y()
     _render_lines(scratch, section, usable)
@@ -225,12 +279,14 @@ def _section_height(section: list[str], usable: float) -> float | None:
     return scratch.get_y() - start
 
 
-def _build(md_text: str, source_label: str = "") -> DocPDF:
-    pdf = _new_pdf()
+def _build(md_text: str, source_label: str = "", doc_format: str = "notes") -> DocPDF:
+    pdf = _new_pdf(doc_format)
     pdf.source_label = source_label
     pdf.add_page()
     usable = PAGE_W_MM - 2 * MARGIN_MM
     bottom = PAGE_H_MM - BOTTOM_MARGIN_MM
+    if doc_format == "checklist":
+        _render_legend(pdf, usable)
 
     # Keep each heading-led section together: if it won't fit in the remaining space
     # (but does fit on a fresh page), page-break BEFORE it. Pushes a whole section to
@@ -238,7 +294,7 @@ def _build(md_text: str, source_label: str = "") -> DocPDF:
     # bottom-of-page room to annotate. Oversized sections (taller than a page) render
     # normally. Measured by a throwaway render — robust, and handles tables uniformly.
     for section in _split_sections(md_text.splitlines()):
-        h = _section_height(section, usable)
+        h = _section_height(section, usable, doc_format)
         if h is not None and pdf.get_y() > TOP_MARGIN_MM + 0.5 and pdf.get_y() + h > bottom:
             pdf.add_page()
         _render_lines(pdf, section, usable)
@@ -246,8 +302,10 @@ def _build(md_text: str, source_label: str = "") -> DocPDF:
 
 
 def render_bytes(md_text: str, source_label: str = "") -> bytes:
-    """Render to PDF bytes (deterministic for a given source + renderer)."""
-    return bytes(_build(md_text, source_label).output())
+    """Render to PDF bytes (deterministic for a given source + renderer). A leading
+    `---` frontmatter block is parsed for options (e.g. `format:`) and stripped."""
+    meta, body = _parse_frontmatter(md_text)
+    return bytes(_build(body, source_label, meta.get("format", "notes")).output())
 
 
 def render_markdown(md_text: str, out_path: str, source_label: str = "") -> None:

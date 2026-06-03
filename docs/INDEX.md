@@ -10,6 +10,9 @@ The Drive ⇄ Supernote document lifecycle. Follows the shared
 | [01-architecture](./01-architecture.md) | Components, the round-trip, file-detection, safety net |
 | [03-decisions](./03-decisions.md) | Why the key choices were made (ADR log) |
 | [04-status](./04-status.md) | What's built vs. the roadmap |
-| [05-backlog](./05-backlog.md) | Captured feature ideas not yet built |
+| [05-conventions](./05-conventions.md) | How docs render (frontmatter, auto-styled checkboxes) |
+| [backlog](./backlog.md) | Captured feature ideas not yet built |
+
+See also [`../RECIPES.md`](../RECIPES.md) — worked structures (punch-list, book, repo docs).
 
 Maintenance: `[human]` the maintainer, `[claude]` kept current by Claude.

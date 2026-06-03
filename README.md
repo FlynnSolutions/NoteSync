@@ -102,6 +102,19 @@ which overrides `config.toml`: `SUPERNOTE_SOURCE_BASE`, `SUPERNOTE_SCAN_ROOTS`
 Once a `.mark` has been read it's logged by content hash (`marks.py`), so the device
 re-uploading the same ink never reprocesses or freezes the doc.
 
+## Document formatting
+
+It syncs *any* Markdown tree — folders carry no special meaning. Two light conventions:
+- **Checkboxes style themselves** — `- [ ]` / `[~]` / `[x]` / `[!]` / `[-]` render as real
+  boxes on the device, in any doc, no setup.
+- **Optional frontmatter** — a `---` block at the top (parsed and **stripped**, never shown
+  on the PDF) tunes a doc: `format: checklist` adds a status legend, `format: book` gives a
+  clean prose layout. Most docs need none.
+
+See [`docs/05-conventions.md`](./docs/05-conventions.md) for the details and
+[`RECIPES.md`](./RECIPES.md) for worked structures (a punch-list, a book, reviewing a repo's
+docs) with runnable [`examples/`](./examples/).
+
 ## Project layout
 
 | File | Role |
