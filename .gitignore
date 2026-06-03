@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+out/*.pdf
+checkin_pages/
+manifest.json
+processed_marks.json
+base/
+device/
+merge_out/
+# Ship only the bundled DejaVu Sans (libre); any user-supplied fonts stay untracked.
+assets/fonts/*
+!assets/fonts/DejaVuSans.ttf
+!assets/fonts/DejaVuSans-Bold.ttf
+!assets/fonts/DejaVuSans-Oblique.ttf
+!assets/fonts/DejaVu-LICENSE.txt
+.env
+config.toml
+snapshots/
+handwriting/QUIRKS.md
+handwriting/key.md
+handwriting/reference/

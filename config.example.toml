@@ -1,0 +1,29 @@
+# supernote-sync config — copy to config.toml and edit. config.toml is gitignored.
+# Every value can also be set via a SUPERNOTE_* env var (which wins), e.g. for a Lambda:
+#   SUPERNOTE_SOURCE_BASE, SUPERNOTE_SCAN_ROOTS (comma-sep), SUPERNOTE_ROOT,
+#   SUPERNOTE_MODEL, SUPERNOTE_CHECKLIST.
+
+# Root your source docs live under; PDFs mirror to the device at matching relative paths.
+source_base = "~/Documents/notes"
+
+# Top-level dirs under source_base to mirror. [] = mirror every dir under source_base
+# (only safe if source_base is dedicated to docs).
+scan_roots = []
+
+# The Supernote sync root — the "Supernote" folder your device syncs through.
+# Leave "" to auto-detect the Google Drive for Desktop mount on macOS:
+#   ~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Supernote
+# Set explicitly for other setups (a different cloud, an rclone mount, a Lambda path).
+supernote_root = ""
+
+# Claude model used to read handwriting (needs ANTHROPIC_API_KEY in env or .env).
+model = "claude-opus-4-7"
+
+# Optional: a single doc for the legacy `sync.sh out` quick-export flow. Leave "" to skip.
+checklist = ""
+
+# Fonts (optional). Renders with the bundled DejaVu Sans by default. Point any of these
+# at your own TTFs to restyle the device PDFs (regular/bold/italic):
+# font_regular = "~/Library/Fonts/MyFont-Regular.ttf"
+# font_bold    = "~/Library/Fonts/MyFont-Bold.ttf"
+# font_italic  = "~/Library/Fonts/MyFont-Italic.ttf"

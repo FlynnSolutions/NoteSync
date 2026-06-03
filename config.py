@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""
+config.py — single source of truth for environment/user-specific settings, so the
+pipeline isn't bolted to one machine (and can be open-sourced + run in a Lambda).
+
+Resolution order, first match wins:
+  1. environment variable (SUPERNOTE_*)  — headless / Lambda / one-off override
+  2. config.toml next to this file        — your local config (gitignored; copy the
+                                            committed config.example.toml to start)
+  3. built-in default / auto-detection    — zero-config local use still "just works"
+                                            (e.g. auto-find the Google Drive mount)
+
+The Supernote folder layout under the sync root (Document/Library, EXPORT) is fixed by
+the Supernote+Drive convention, so only the ROOT is configurable; the subdirs derive.
+
+Shell access: `python config.py <key>` prints a resolved value (used by sync.sh), e.g.
+  python config.py supernote_root | export_dir | source_base | checklist
+"""
+from __future__ import annotations
+
+import os
+import sys
+import tomllib
+from functools import lru_cache
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+@lru_cache(maxsize=1)
+def _file_cfg() -> dict:
+    f = HERE / "config.toml"
+    if f.exists():
+        try:
+            return tomllib.loads(f.read_text(encoding="utf-8"))
+        except (tomllib.TOMLDecodeError, OSError) as e:
+            print(f"config.py: ignoring bad config.toml ({e})", file=sys.stderr)
+    return {}
+
+
+def _str(key: str, env: str, default: str = "") -> str:
+    if v := os.environ.get(env):
+        return v
+    v = _file_cfg().get(key)
+    return str(v) if v not in (None, "") else default
+
+
+def _expand(p: str) -> Path | None:
+    return Path(os.path.expanduser(p)).resolve() if p else None
+
+
+# --- source side ----------------------------------------------------------
+def source_base() -> Path:
+    """Root the source docs are mirrored relative to (e.g. ~/Projects)."""
+    return _expand(_str("source_base", "SUPERNOTE_SOURCE_BASE", "~/Projects"))
+
+
+def scan_roots() -> list[str]:
+    """Top-level dirs under source_base to mirror; empty list = every dir."""
+    if v := os.environ.get("SUPERNOTE_SCAN_ROOTS"):
+        return [r.strip() for r in v.split(",") if r.strip()]
+    return list(_file_cfg().get("scan_roots", []))
+
+
+# --- Supernote / Drive side ----------------------------------------------
+@lru_cache(maxsize=1)
+def supernote_root() -> Path | None:
+    """The Supernote sync root. Explicit config wins; else auto-detect the Google
+    Drive for Desktop mount (<mount>/My Drive/Supernote). Cached (the glob is not free)."""
+    if explicit := _str("supernote_root", "SUPERNOTE_ROOT"):
+        return _expand(explicit)
+    mounts = list(Path.home().glob("Library/CloudStorage/GoogleDrive-*"))
+    return (mounts[0] / "My Drive" / "Supernote") if mounts else None
+
+
+def _under_root(*parts: str) -> Path | None:
+    r = supernote_root()
+    return r.joinpath(*parts) if r else None
+
+
+def library() -> Path | None:
+    """Where mirrored PDFs and their `.mark` sidecars live, or None if no root."""
+    return _under_root("Document", "Library")
+
+
+def document_dir() -> Path | None:
+    """The device's Document folder (drop a PDF here to read it), or None."""
+    return _under_root("Document")
+
+
+def export_dir() -> Path | None:
+    """Where the device writes annotated exports, or None if no root."""
+    return _under_root("EXPORT")
+
+
+def mark_for(pdf: Path) -> Path:
+    """The `.mark` annotation sidecar path for a PDF."""
+    return pdf.with_name(pdf.name + ".mark")
+
+
+def pdf_for(mark: Path) -> Path:
+    """The PDF a `.mark` sidecar belongs to (strips the .mark suffix)."""
+    return mark.with_name(mark.name[: -len(".mark")])
+
+
+# --- misc -----------------------------------------------------------------
+def model() -> str:
+    """Claude model used to read ink."""
+    return _str("model", "SUPERNOTE_MODEL", "claude-opus-4-7")
+
+
+def checklist() -> Path | None:
+    """Optional single doc for the legacy `sync.sh out` flow."""
+    return _expand(_str("checklist", "SUPERNOTE_CHECKLIST"))
+
+
+# --- fonts ----------------------------------------------------------------
+# The renderer needs a regular/bold/italic TTF. Defaults to the bundled DejaVu Sans;
+# point any of these at your own font to restyle the device PDFs.
+_FONT_DIR = HERE / "assets" / "fonts"
+
+
+def _font(key: str, env: str, bundled: str) -> Path:
+    return _expand(_str(key, env)) or _FONT_DIR / bundled
+
+
+def font_regular() -> Path:
+    """Regular-weight TTF (bundled DejaVu Sans unless overridden)."""
+    return _font("font_regular", "SUPERNOTE_FONT_REGULAR", "DejaVuSans.ttf")
+
+
+def font_bold() -> Path:
+    """Bold TTF (bundled DejaVu Sans unless overridden)."""
+    return _font("font_bold", "SUPERNOTE_FONT_BOLD", "DejaVuSans-Bold.ttf")
+
+
+def font_italic() -> Path:
+    """Italic/oblique TTF (bundled DejaVu Sans unless overridden)."""
+    return _font("font_italic", "SUPERNOTE_FONT_ITALIC", "DejaVuSans-Oblique.ttf")
+
+
+# --- shell bridge ---------------------------------------------------------
+_KEYS = {
+    "source_base": source_base, "supernote_root": supernote_root,
+    "library": library, "document_dir": document_dir, "export_dir": export_dir,
+    "model": model, "checklist": checklist,
+    "scan_roots": lambda: " ".join(scan_roots()),
+}
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2 or sys.argv[1] not in _KEYS:
+        sys.exit(f"usage: config.py <{' | '.join(_KEYS)}>")
+    val = _KEYS[sys.argv[1]]()
+    print(val if val is not None else "")

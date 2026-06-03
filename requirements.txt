@@ -1,0 +1,5 @@
+# Python deps. Also needs the `pdftoppm` binary (poppler) and fonts — see the README.
+anthropic>=0.104      # read_ink.py — reads handwriting via Claude vision
+fpdf2>=2.8            # render.py / export.py — markdown -> PDF
+Pillow>=10            # marklayer.py — composite ink over page images
+supernotelib>=0.7     # provides the `supernote-tool` CLI (.note/.mark -> PNG)

@@ -1,0 +1,15 @@
+# Tooling config for supernote-sync. Not a packaged library — this is a CLI tool repo;
+# install deps from requirements.txt. The lint config below is the project's code standard.
+#
+#   ruff check .        # lint
+#   ruff format --diff  # (optional) formatting preview — we keep compact data literals,
+#                       # so format is advisory, not enforced.
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [".venv", "base", "device", "snapshots", "checkin_pages", "out", "merge_out"]
+
+[tool.ruff.lint]
+# pyflakes + pycodestyle + isort + pyupgrade + bugbear + comprehensions + simplify.
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
