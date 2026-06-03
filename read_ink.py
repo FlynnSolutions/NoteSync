@@ -37,6 +37,12 @@ DEVICE_DIR = HERE / "device"
 QUIRKS = HERE / "handwriting" / "QUIRKS.md"
 MODEL = config.model()  # high-res vision + literal instruction-following
 
+_EMOJI_GUIDE = {
+    "none": "Do not use emoji in anything you write into the document.",
+    "minimal": "Use emoji sparingly — only where it genuinely adds clarity.",
+    "liberal": "Emoji are welcome where they add clarity or warmth.",
+}
+
 SYSTEM_INSTRUCTIONS = """\
 You read a person's handwritten annotations on a document and apply them to the \
 document's markdown source.
@@ -139,6 +145,7 @@ def main() -> None:
     # Stable prefix (instructions + quirks + base doc) is cached; images stay volatile.
     system = [
         {"type": "text", "text": SYSTEM_INSTRUCTIONS},
+        {"type": "text", "text": f"Style: {_EMOJI_GUIDE.get(config.emoji(), _EMOJI_GUIDE['minimal'])}"},
         {"type": "text", "text": f"# Handwriting profile for this person\n\n{quirks}"},
         {"type": "text", "text": f"# Current markdown source ({rel})\n\n{base_md}",
          "cache_control": {"type": "ephemeral"}},

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
-# sync.sh — one-command check-out / check-in for the Supernote TODO loop.
+# sync.sh — one-command check-out / check-in for the Supernote doc loop.
 #
-#   ./sync.sh out         export the markdown -> PDF, push to the Nomad's Document folder
-#   ./sync.sh in [FILE]   convert an annotated export -> page PNGs for Claude to read
-#                         (FILE optional; defaults to the newest file in EXPORT/)
+#   ./sync.sh init        interactive first-run setup (paths + preferences -> config.toml)
 #   ./sync.sh mirror      render the whole doc tree -> PDFs into the Drive Library (matching paths) + manifest
-#   ./sync.sh reconcile REL [--apply]   3-way merge device edits into the source doc (conflict-aware)
+#   ./sync.sh in [FILE]   extract a pending annotation's ink -> page PNGs for Claude to read
 #   ./sync.sh process REL [--apply]     hands-off: read ink via Claude API -> merge -> apply (needs ANTHROPIC_API_KEY)
+#   ./sync.sh reconcile REL [--apply]   3-way merge device edits into the source doc (conflict-aware)
+#   ./sync.sh calibrate [read]   handwriting scribble test: make the sheet (or read a filled one)
+#   ./sync.sh out         export the configured checklist -> PDF, push to the device
 #   ./sync.sh snapshot    commit the current checklist into the versioned safety-net mirror
 #   ./sync.sh status      show what's in the device Document/ and EXPORT/ folders
 #
@@ -25,6 +26,11 @@ cfg() { "$PY" "$HERE/config.py" "$1"; }
 cmd="${1:-help}"
 
 case "$cmd" in
+  init)
+    # Interactive first-run setup: writes config.toml + .env. Re-runnable to update.
+    "$PY" "$HERE/setup.py"
+    ;;
+
   out)
     CHECKLIST="$(cfg checklist)"
     [ -n "$CHECKLIST" ] || { echo "No 'checklist' configured (set it in config.toml or \$SUPERNOTE_CHECKLIST)."; exit 1; }
@@ -110,6 +116,24 @@ case "$cmd" in
     fi
     ;;
 
+  calibrate)
+    # Handwriting scribble test. `calibrate` makes the sheet and pushes it to the device;
+    # `calibrate read` builds handwriting/QUIRKS.md from a filled sheet's extracted ink.
+    if [ "${2:-}" = "read" ]; then
+      "$PY" "$HERE/calibrate.py" read "$HERE/checkin_pages"
+    else
+      mkdir -p "$HERE/out"
+      sheet="$HERE/out/handwriting-calibration.pdf"
+      "$PY" "$HERE/calibrate.py" sheet "$sheet"
+      DOC_DIR="$(cfg document_dir)"
+      if [ -n "$DOC_DIR" ] && [ -d "$DOC_DIR" ]; then
+        cp "$sheet" "$DOC_DIR/" && echo "Pushed the calibration sheet to the device. Fill it in, then: ./sync.sh in && ./sync.sh calibrate read"
+      else
+        echo "Sheet is at: $sheet"
+      fi
+    fi
+    ;;
+
   status)
     DOC_DIR="$(cfg document_dir)"; EXPORT_DIR="$(cfg export_dir)"
     echo "Document/ (drop PDFs here to annotate):"
@@ -120,6 +144,6 @@ case "$cmd" in
     ;;
 
   *)
-    grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -9
+    grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -12
     ;;
 esac

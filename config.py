@@ -139,6 +139,23 @@ def font_italic() -> Path:
     return _font("font_italic", "SUPERNOTE_FONT_ITALIC", "DejaVuSans-Oblique.ttf")
 
 
+# --- preferences ----------------------------------------------------------
+def _pref(key: str, env: str, default: str) -> str:
+    if v := os.environ.get(env):
+        return v
+    return str(_file_cfg().get("preferences", {}).get(key, default))
+
+
+def emoji() -> str:
+    """Emoji usage in notes Claude writes: none | minimal | liberal."""
+    return _pref("emoji", "SUPERNOTE_EMOJI", "minimal")
+
+
+def density() -> str:
+    """Render spacing: compact | normal | roomy."""
+    return _pref("density", "SUPERNOTE_DENSITY", "normal")
+
+
 # --- shell bridge ---------------------------------------------------------
 _KEYS = {
     "source_base": source_base, "supernote_root": supernote_root,

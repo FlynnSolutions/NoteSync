@@ -18,6 +18,7 @@ from datetime import datetime
 
 from fpdf import FPDF
 
+import config
 from common import (
     CHECK_STATES,
     FONT,
@@ -31,6 +32,10 @@ from common import (
 
 HEADING_SIZE = {1: 15, 2: 12.5, 3: 11, 4: 10, 5: 9.5, 6: 9}
 BODY = 8.5
+# Spacing density preference -> a gentle multiplier on body line heights / gaps.
+_LH = {"compact": 0.9, "normal": 1.0, "roomy": 1.16}.get(config.density(), 1.0)
+PARA_LH = 4.3 * _LH
+LIST_LH = 4.4 * _LH
 TOP_MARGIN_MM = MARGIN_MM + 4  # extra breathing room so heading ascenders don't clip
 BOTTOM_MARGIN_MM = 12          # room for the footer + a little annotation space
 _FIXED_PDF_DATE = datetime(2001, 1, 1)  # fixed so identical source -> identical bytes
@@ -202,20 +207,20 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
                 text_x = indent + box + 1.8
                 pdf.set_left_margin(text_x)
                 pdf.set_xy(text_x, y)
-                pdf.multi_cell(PAGE_W_MM - text_x - MARGIN_MM, 4.4, body_text,
+                pdf.multi_cell(PAGE_W_MM - text_x - MARGIN_MM, LIST_LH, body_text,
                                markdown=True, align="L")
             else:
                 marker = (lm.group(2) + " ") if lm.group(2) not in ("-", "*", "+") else "- "
                 pdf.set_left_margin(indent)  # wrapped lines align under the indent
                 pdf.set_x(indent)
-                pdf.multi_cell(PAGE_W_MM - indent - MARGIN_MM, 4.4,
+                pdf.multi_cell(PAGE_W_MM - indent - MARGIN_MM, LIST_LH,
                                sanitize(marker) + body_text, markdown=True, align="L")
             pdf.set_left_margin(MARGIN_MM)   # restore
             continue
 
         # blank line
         if not line.strip():
-            pdf.ln(2)
+            pdf.ln(2 * _LH)
             i += 1
             continue
 
@@ -226,7 +231,7 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
             para.append(lines[i].rstrip())
             i += 1
         pdf.set_font(FONT, "", BODY)
-        pdf.multi_cell(usable, 4.3, _inline(" ".join(para)) or " ", markdown=True, align="L")
+        pdf.multi_cell(usable, PARA_LH, _inline(" ".join(para)) or " ", markdown=True, align="L")
         pdf.ln(1.3)
 
 

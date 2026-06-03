@@ -31,6 +31,14 @@ How to name the new file. Depends on solving `.note`/cloud-fetch retrieval.
 
 ## Interactive onboarding + preferences (config wizard)
 
+**Status (2026-06-02): mostly BUILT.** `./sync.sh init` (`setup.py`) collects paths +
+preferences and writes `config.toml`/`.env` — done. Preferences wired: `density` →
+render line-spacing, `emoji` → read_ink prompt (`config.emoji/density`). Calibration:
+`./sync.sh calibrate` generates the scribble sheet (`calibrate.py` — verified). The
+calibration **read-back** (`calibrate read` → builds `QUIRKS.md`) is coded but NOT yet
+verified against a real filled sheet (needs the physical device). Remaining: more render
+prefs if wanted (font size, margins via density), and proving the read-back end-to-end.
+
 **Goal.** First-run onboarding that walks a new user through setup interactively
 (instead of hand-editing `config.toml`), and a way to revisit those answers later.
 It collects three kinds of things:

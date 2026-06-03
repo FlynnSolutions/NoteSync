@@ -27,3 +27,8 @@ checklist = ""
 # font_regular = "~/Library/Fonts/MyFont-Regular.ttf"
 # font_bold    = "~/Library/Fonts/MyFont-Bold.ttf"
 # font_italic  = "~/Library/Fonts/MyFont-Italic.ttf"
+
+# Preferences (run `./sync.sh init` to set these interactively).
+[preferences]
+emoji = "minimal"    # none | minimal | liberal — how Claude writes notes it adds
+density = "normal"   # compact | normal | roomy — render spacing
