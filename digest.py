@@ -20,8 +20,9 @@ Usage:
     python digest.py NAME       # run one recipe by name, ignoring the day filter
 
 Activity is gathered "since the last run" of each recipe (tracked in digest_state.json;
-first run looks back 7 days). Needs ANTHROPIC_API_KEY. Output mirrors to the device on the
-next `sync.sh mirror` (the recipe's `out:` must be under a scan_root to reach the device).
+first run looks back 7 days). The Claude call goes through backend.py — by default your
+Claude subscription (no API tokens). Output mirrors to the device on the next `sync.sh
+mirror` (the recipe's `out:` must be under a scan_root to reach the device).
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import backend
 import config
 import vcs
 from render import _parse_frontmatter
@@ -122,21 +124,16 @@ def _state() -> dict:
 
 
 def _claude_digest(instructions: str, context: str) -> str:
-    import anthropic  # local import so non-API paths stay light
-
-    import read_ink
+    import read_ink  # reuse its .env loader (for the api backend's key)
 
     read_ink._load_env()
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("ANTHROPIC_API_KEY not set (env or supernote-sync/.env)")
+    if config.backend() == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise SystemExit("backend is 'api' but ANTHROPIC_API_KEY not set (env or "
+                         "supernote-sync/.env, or switch to the default claude_code backend)")
     style = f"Emoji preference: {config.emoji()}."
     user = f"{instructions}\n\n{style}\n\n--- CONTEXT ---\n{context}\n--- END CONTEXT ---\n\nWrite the digest."
-    client = anthropic.Anthropic()
-    with client.messages.stream(model=config.model(), max_tokens=4000,
-                                system=[{"type": "text", "text": _SYSTEM}],
-                                messages=[{"role": "user", "content": user}]) as stream:
-        msg = stream.get_final_message()
-    return "".join(b.text for b in msg.content if b.type == "text").strip()
+    system = [{"type": "text", "text": _SYSTEM}]
+    return backend.read(system, [{"type": "text", "text": user}], max_tokens=4000).strip()
 
 
 def run_recipe(path: Path, base: Path, force: bool, state: dict, today: int) -> Path | None:

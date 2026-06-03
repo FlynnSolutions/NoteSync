@@ -15,6 +15,7 @@ if nothing is ready.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 
 import config
@@ -22,6 +23,11 @@ import marks as marks_ledger
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--all", action="store_true",
+                    help="list ALL ready pending PDFs (one per line), not just the newest")
+    args = ap.parse_args()
+
     library, export_dir = config.library(), config.export_dir()
     if library is None or export_dir is None:
         sys.exit("Supernote root not found (set supernote_root in config.toml or "
@@ -46,6 +52,10 @@ def main() -> None:
         sys.exit(2)
 
     ready.sort(key=lambda pe: pe[1].stat().st_mtime, reverse=True)
+    if args.all:
+        for pdf, _ in ready:                         # newest first, one per line
+            print(pdf)
+        return
     if len(ready) > 1:
         print(f"{len(ready)} docs have pending annotations; processing newest: {ready[0][0].name}", file=sys.stderr)
         for pdf, _ in ready[1:]:

@@ -4,6 +4,7 @@
 #
 #   ./sync.sh init        interactive first-run setup (paths + preferences -> config.toml)
 #   ./sync.sh mirror      render the whole doc tree -> PDFs into the Drive Library (matching paths) + manifest
+#   ./sync.sh run         do all due work: digests -> mirror -> drain ALL pending annotations (the heartbeat entry point)
 #   ./sync.sh in [FILE]   extract a pending annotation's ink -> page PNGs for Claude to read
 #   ./sync.sh process REL [--apply]     hands-off: read ink via Claude API -> merge -> apply (needs ANTHROPIC_API_KEY)
 #   ./sync.sh reconcile REL [--apply]   3-way merge device edits into the source doc (conflict-aware)
@@ -53,6 +54,13 @@ case "$cmd" in
     # Render the whole doc tree -> PDFs into the device-synced Drive Library at
     # matching relative paths, and write the manifest for trip-back routing.
     "$PY" "$HERE/mirror.py" "${@:2}"
+    ;;
+
+  run)
+    # One-shot "do all due work" pass for a scheduler/heartbeat: due digests ->
+    # mirror -> drain EVERY pending annotation (read on your Claude subscription,
+    # 3-way merge, apply). Conflicts are left for manual resolution. See run.py.
+    "$PY" "$HERE/run.py" "${@:2}"
     ;;
 
   reconcile)
