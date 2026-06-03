@@ -10,6 +10,7 @@ digests/
 base/
 device/
 merge_out/
+.backend_out/
 # Ship only the bundled DejaVu Sans (libre); any user-supplied fonts stay untracked.
 assets/fonts/*
 !assets/fonts/DejaVuSans.ttf

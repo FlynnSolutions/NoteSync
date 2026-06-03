@@ -104,8 +104,15 @@ def pdf_for(mark: Path) -> Path:
 
 
 # --- misc -----------------------------------------------------------------
+def backend() -> str:
+    """Which AI backend reads ink: claude_code (your Claude subscription via `claude -p`,
+    the default — no metered tokens) | api (Anthropic SDK, needs ANTHROPIC_API_KEY)."""
+    return _str("backend", "SUPERNOTE_BACKEND", "claude_code")
+
+
 def model() -> str:
-    """Claude model used to read ink."""
+    """Claude model for the `api` backend (the claude_code backend uses your Claude Code
+    model setting). Ignored when backend is claude_code."""
     return _str("model", "SUPERNOTE_MODEL", "claude-opus-4-7")
 
 
@@ -165,7 +172,7 @@ def digest_dir() -> Path:
 _KEYS = {
     "source_base": source_base, "supernote_root": supernote_root,
     "library": library, "document_dir": document_dir, "export_dir": export_dir,
-    "model": model, "checklist": checklist,
+    "model": model, "backend": backend, "checklist": checklist,
     "scan_roots": lambda: " ".join(scan_roots()),
 }
 

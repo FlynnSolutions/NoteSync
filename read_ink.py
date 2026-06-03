@@ -17,25 +17,24 @@ Usage:
     python read_ink.py --rel notes/todo.md \
         [--pages checkin_pages] [--out device/<rel>]
 
-Requires:  pip install anthropic   and   ANTHROPIC_API_KEY (env or supernote-sync/.env)
+The model call goes through backend.py, which by default uses your Claude subscription
+(`claude -p`, no API tokens). Set backend = "api" (config) to use the metered Anthropic
+SDK instead, which then needs `pip install anthropic` + ANTHROPIC_API_KEY.
 """
 from __future__ import annotations
 
 import argparse
-import base64
 import os
 import sys
 from pathlib import Path
 
-import anthropic
-
+import backend
 import config
 
 HERE = Path(__file__).resolve().parent
 BASE_DIR = HERE / "base"
 DEVICE_DIR = HERE / "device"
 QUIRKS = HERE / "handwriting" / "QUIRKS.md"
-MODEL = config.model()  # high-res vision + literal instruction-following
 
 _EMOJI_GUIDE = {
     "none": "Do not use emoji in anything you write into the document.",
@@ -96,12 +95,6 @@ def _load_env() -> None:
                 os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-def _img_block(path: Path) -> dict:
-    data = base64.standard_b64encode(path.read_bytes()).decode("utf-8")
-    return {"type": "image",
-            "source": {"type": "base64", "media_type": "image/png", "data": data}}
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--rel", required=True, help="source rel path, e.g. notes/todo.md")
@@ -111,8 +104,9 @@ def main() -> None:
     args = ap.parse_args()
 
     _load_env()
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("ANTHROPIC_API_KEY not set (export it, or put it in supernote-sync/.env)")
+    if config.backend() == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
+        sys.exit("backend is 'api' but ANTHROPIC_API_KEY not set (export it, put it in "
+                 "supernote-sync/.env, or switch to the default claude_code backend)")
 
     rel = args.rel
     base_path = BASE_DIR / rel
@@ -134,15 +128,14 @@ def main() -> None:
         full = args.pages / ink.name
         content.append({"type": "text", "text": f"--- {ink.stem}: full page ---"})
         if full.exists():
-            content.append(_img_block(full))
+            content.append({"type": "image", "path": full})
         content.append({"type": "text", "text": f"--- {ink.stem}: ink only ---"})
-        content.append(_img_block(ink))
+        content.append({"type": "image", "path": ink})
     content.append({"type": "text", "text":
         f"Apply these annotations to the markdown source for `{rel}` and return the "
         "complete edited markdown."})
 
-    client = anthropic.Anthropic()
-    # Stable prefix (instructions + quirks + base doc) is cached; images stay volatile.
+    # Stable prefix (instructions + quirks + base doc); the api backend prompt-caches it.
     system = [
         {"type": "text", "text": SYSTEM_INSTRUCTIONS},
         {"type": "text", "text": f"Style: {_EMOJI_GUIDE.get(config.emoji(), _EMOJI_GUIDE['minimal'])}"},
@@ -151,17 +144,7 @@ def main() -> None:
          "cache_control": {"type": "ephemeral"}},
     ]
 
-    with client.messages.stream(
-        model=MODEL,
-        max_tokens=32000,
-        thinking={"type": "adaptive"},
-        output_config={"effort": "high"},
-        system=system,
-        messages=[{"role": "user", "content": content}],
-    ) as stream:
-        msg = stream.get_final_message()
-
-    edited = "".join(b.text for b in msg.content if b.type == "text").strip()
+    edited = backend.read(system, content).strip()
     # Strip accidental code fences if the model added them.
     if edited.startswith("```"):
         edited = edited.split("\n", 1)[1] if "\n" in edited else edited
@@ -172,10 +155,7 @@ def main() -> None:
     out = args.out or (DEVICE_DIR / rel)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(edited, encoding="utf-8")
-    u = msg.usage
-    print(f"Wrote {out}")
-    print(f"  tokens: in={u.input_tokens} cache_read={getattr(u, 'cache_read_input_tokens', 0)} "
-          f"out={u.output_tokens}")
+    print(f"Wrote {out}  (backend: {config.backend()})")
     print(f"  next: ./sync.sh reconcile {rel} --apply")
 
 
