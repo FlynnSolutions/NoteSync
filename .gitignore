@@ -5,6 +5,8 @@ out/*.pdf
 checkin_pages/
 manifest.json
 processed_marks.json
+digest_state.json
+digests/
 base/
 device/
 merge_out/

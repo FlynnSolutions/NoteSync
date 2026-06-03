@@ -7,6 +7,7 @@
 #   ./sync.sh in [FILE]   extract a pending annotation's ink -> page PNGs for Claude to read
 #   ./sync.sh process REL [--apply]     hands-off: read ink via Claude API -> merge -> apply (needs ANTHROPIC_API_KEY)
 #   ./sync.sh reconcile REL [--apply]   3-way merge device edits into the source doc (conflict-aware)
+#   ./sync.sh digest [NAME]      generate "daily reading" digest(s) from recipes in digests/
 #   ./sync.sh calibrate [read]   handwriting scribble test: make the sheet (or read a filled one)
 #   ./sync.sh out         export the configured checklist -> PDF, push to the device
 #   ./sync.sh snapshot    commit the current checklist into the versioned safety-net mirror
@@ -117,6 +118,11 @@ case "$cmd" in
     fi
     ;;
 
+  digest)
+    # Generate "daily reading" digests from your recipes (digests/), then mirror to push.
+    "$PY" "$HERE/digest.py" "${2:-}"
+    ;;
+
   calibrate)
     # Handwriting scribble test. `calibrate` makes the sheet and pushes it to the device;
     # `calibrate read` builds handwriting/QUIRKS.md from a filled sheet's extracted ink.
@@ -145,6 +151,6 @@ case "$cmd" in
     ;;
 
   *)
-    grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -12
+    grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -14
     ;;
 esac

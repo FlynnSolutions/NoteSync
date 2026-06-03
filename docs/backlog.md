@@ -113,6 +113,16 @@ directly on the `config.py` layer (see [`config.py`] and the de-personalization 
 
 ## Automated digests + daily reading docs
 
+**Status (2026-06-02): BUILT.** `digest.py` + `./sync.sh digest [NAME]`. Configurable via
+Markdown **recipe** files in `digests/` (gitignored; templates in `examples/digests/`):
+frontmatter sets `days` (daily/mon-fri/mon,wed/…), `sources` (folders to summarize),
+`review` (docs to read in full + critique), `out` (where it lands under source_base); the
+body is the user's plain-language instructions to Claude. Gathers git activity since the
+recipe's last run (tracked in `digest_state.json`; first run = 7 days), reads the review
+docs, calls Claude, writes `<out>/<name>-<date>.md` (mirrors to device). Verified end-to-end
+EXCEPT the live Claude call (the account is out of API credits). Remaining: auto-scheduling
+(the container/cron) + digest archiving/retirement.
+
 **Goal.** Auto-generate short summary docs and push them to the device as a quick daily
 read — open the Supernote in the morning and skim what changed, what's new, what needs
 attention. Per-folder (a daily digest for a given project/area) and/or one global digest.
@@ -152,3 +162,31 @@ in the mirrored tree (path-based: `[detail](other.md)` → opens `other.pdf` on 
 **Why it matters / open.** If cross-PDF links work on the device, the punch-list →
 detail-doc navigation (the `deliverables/` model) becomes real on the Supernote, not just
 on the desktop. On-device feasibility is the unknown — needs a hardware test.
+
+---
+
+## Ask `@claude` a question in a doc (RAG over the tree)
+
+**Goal.** Handwrite a *question* on the device — `@claude what's blocking the migration?` —
+and on check-in Claude searches/reads the relevant docs and writes the **answer inline**
+(with sources), instead of editing. A natural extension of the existing `@claude` *command*
+(which does edits): when the marked instruction is a question, answer it.
+
+**Key point (cost).** At this scale, **no vectorizing/embeddings needed** — Claude can just
+be handed the relevant docs (or the whole small tree, or an agentic grep-then-read) and
+answer in one cheap call. Embeddings/semantic-index only earn their cost at thousands of
+pages (see the search-box item). So this is a small feature, not a pipeline.
+
+**Build sketch.** In `read_ink`, detect a question-form `@claude` mark; gather candidate
+docs (by folder / agentic search); add them to the prompt; have Claude write the answer at
+that spot in the source. Round-trips like any other edit.
+
+---
+
+## Semantic search box (someday — a fuller productivity tool)
+
+**Goal.** A search box that matches *meaning* not keywords ("budget" → finds "expenses",
+"runway"): chunk each doc, embed it, find nearest to the query → ranked snippets + jump
+links. Deferred — only worth the embedding-index overhead when the corpus is large and you
+want a real query surface (i.e. if this grows into a full productivity tool). The cheaper
+"ask Claude a question" path above covers the near-term need.

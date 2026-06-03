@@ -156,6 +156,11 @@ def density() -> str:
     return _pref("density", "SUPERNOTE_DENSITY", "normal")
 
 
+def digest_dir() -> Path:
+    """Folder holding digest recipe files (see digest.py). Default: <repo>/digests."""
+    return _expand(_str("digest_dir", "SUPERNOTE_DIGEST_DIR")) or HERE / "digests"
+
+
 # --- shell bridge ---------------------------------------------------------
 _KEYS = {
     "source_base": source_base, "supernote_root": supernote_root,
