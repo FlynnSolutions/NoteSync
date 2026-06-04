@@ -143,6 +143,21 @@ digest's focus (a preference, see the onboarding wizard).
 
 ---
 
+## Unattended conflict backoff (container)
+
+**The gap.** When a doc is edited on both the laptop and the device in the same place,
+`reconcile` leaves it as a conflict (markers in `merge_out/`, not applied) and it stays
+pending. On the always-on container (`deploy/`) nobody resolves it interactively, so every
+loop tick re-attempts it — spending one `claude -p` read each time with no progress, until a
+human fixes the source. Found in the deploy audit (2026-06-03).
+
+**What to build.** A small backoff/skip: record conflicted `(rel, mark-hash)` and stop
+re-reading that exact pair until the source or the ink changes (the marks-ledger pattern,
+but for "seen-and-conflicted" rather than "applied"). Or surface conflicts out of the
+container (a digest line / notification) so they get resolved instead of silently retried.
+
+---
+
 ## Document linking (programmatic vs. on-device)
 
 **Goal.** Links between docs that work *on the device* — a punch-list item that points to
