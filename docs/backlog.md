@@ -143,6 +143,21 @@ digest's focus (a preference, see the onboarding wizard).
 
 ---
 
+## Backend rate-limit throttle (subscription safety)
+
+**The gap.** `claude -p` on a Claude subscription shares short-window/concurrency rate limits
+(before 2026-06-15, the interactive 5-hour + weekly caps; concurrency ~3–4 sessions). Firing
+many calls in a burst trips a "rate limit" error far below the monthly cap. `run.py` already
+drains serially so it won't burst on its own — but a future caller (parallel docs, a fan-out)
+could. Deferred 2026-06-03: Cory has never neared the limit, so not needed yet.
+
+**What to build (when limits actually bite).** A small throttle in `backend.py`: a minimum
+gap between `claude -p` calls and/or a concurrency=1 guard, plus retry-with-backoff on a
+`rate_limit` error (Claude Code emits a `system/api_retry` event with `error: rate_limit`).
+Cheapest version: a process-wide lock + sleep so no two reads ever overlap.
+
+---
+
 ## Unattended conflict backoff (container)
 
 **The gap.** When a doc is edited on both the laptop and the device in the same place,

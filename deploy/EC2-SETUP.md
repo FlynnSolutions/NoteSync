@@ -26,16 +26,39 @@ the real trigger — the loop just notices the new export within a poll interval
 poll is indistinguishable from "event-driven" for this; there's no value in wiring up Google
 push notifications.)
 
+### Two ways to trigger it (`RUN_MODE`)
+
+- **`loop`** (default): the container self-schedules — mount Drive once, run a pass every
+  `LOOP_INTERVAL`. Simplest; good if this box does nothing else.
+- **`oneshot`**: mount, run **one** pass, flush, exit. Use this when an **external** trigger
+  drives it — the "scheduled → cron, on-demand → heartbeat" split. A host crontab handles the
+  clockwork:
+  ```cron
+  */10 * * * * docker run --rm --cap-add SYS_ADMIN --device /dev/fuse \
+      -v /home/ubuntu/supernote-sync/deploy/rclone.conf:/root/.config/rclone/rclone.conf:ro \
+      -v sync-work:/work -v sync-state:/state \
+      --env-file /home/ubuntu/supernote-sync/deploy/loop.env -e RUN_MODE=oneshot supernote-sync
+  ```
+  and your phone **heartbeat** fires the *same* one-shot on demand. Either way the pass is
+  **serial** — `run.py` drains pending docs one at a time, so it never bursts the
+  subscription's short-window/concurrency rate limits (the thing that breaks bursty automation).
+
 ## What it costs
 
 - **Host:** a Lightsail **1 GB** instance (~$5/mo) or **2 GB** (~$10/mo); equivalently EC2
   `t4g.micro` (~$6/mo) / `t4g.small` (~$12/mo); prices drift, confirm against current AWS
   pricing. **Avoid 512 MB** — expect PDF rendering plus the Claude binary to thrash it (not
   yet measured). arm64 (Graviton/Lightsail) is cheaper and fully supported.
-- **AI:** $0 extra — it runs on your existing Claude subscription. As of 2026-06-15, headless
-  `claude -p` draws from a separate monthly **Agent SDK credit** ($200/mo on Max 20x), not
-  your interactive limit. A few doc-reads a day is a tiny fraction of that. *(Confirm the
-  current figure against Anthropic's plan page — it's new.)*
+- **AI:** runs on your Claude subscription, no metered API key. Economics shift on a known
+  date (verified against Anthropic's [Agent SDK plan article](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)):
+  - **Before 2026-06-15:** `claude -p` draws against your normal subscription limits (the
+    5-hour rolling window + weekly caps). Fine for low, **serial** volume like this; the risk
+    is only *bursting* many parallel calls — which `run.py` doesn't do.
+  - **From 2026-06-15:** `claude -p` draws from a separate monthly **Agent SDK credit**
+    (Max 20x = **$200/mo, metered at API rates, no rollover**), decoupled from your interactive
+    use. A few doc-reads/day is a tiny fraction of $200, so this stays effectively free — but
+    it's "included up to $200/mo," not literally unlimited. Past the credit it bills API rates
+    (or stops). To switch a workload to the pay-as-you-go API instead, set `backend = "api"`.
 
 ## Prerequisites (one-time, on your laptop)
 

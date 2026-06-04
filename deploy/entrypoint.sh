@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 #
-# entrypoint.sh — the unattended sync loop for the container (laptop-closed hosting).
+# entrypoint.sh — the container's sync runner (laptop-closed hosting). Two modes via RUN_MODE:
+#   loop     (default) self-schedules: mount Drive once, then run a pass every LOOP_INTERVAL.
+#   oneshot  mount, run ONE pass, flush, exit — for an external trigger (host cron for the
+#            clockwork, or the heartbeat for on-demand). "scheduled -> cron, on-demand -> heartbeat".
 #
-# Each tick pulls the docs repo, runs the full check-in (`sync.sh run` = due digests ->
-# mirror -> drain ALL pending annotations, reading ink on your Claude subscription), then
-# pushes any applied edits back. See deploy/EC2-SETUP.md.
+# A pass = pull the docs repo, run `sync.sh run` (due digests -> mirror -> drain ALL pending
+# annotations, reading ink on your Claude subscription, serially — never bursting), push edits.
+# See deploy/EC2-SETUP.md.
 #
 # Auth: uses CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) — your subscription, not
 # the metered API. ANTHROPIC_API_KEY is deliberately unset: if present it OVERRIDES the
@@ -20,6 +23,7 @@ set -euo pipefail
 unset ANTHROPIC_API_KEY            # force the subscription; never the metered API
 RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
 INTERVAL="${LOOP_INTERVAL:-300}"
+RUN_MODE="${RUN_MODE:-loop}"       # loop = self-scheduled; oneshot = one pass then exit
 
 mkdir -p /drive /work /state
 
@@ -36,15 +40,28 @@ else git clone "$DOCS_REPO" /work; fi
 git -C /work config user.name  "${GIT_USER_NAME:-supernote-sync}"
 git -C /work config user.email "${GIT_USER_EMAIL:-supernote-sync@localhost}"
 
-# 3. Loop: pull -> do all due work -> push.
+# 3. Run passes. A pass is serial (run.py drains pending docs one at a time — no bursting,
+#    which is what trips the subscription's short-window/concurrency rate limits).
 cd /app
+run_once() {
+  git -C /work pull --ff-only || true
+  ./sync.sh run || echo "run failed — continuing" >&2
+  git -C /work push || true
+}
+
+if [ "$RUN_MODE" = "oneshot" ]; then
+  # External trigger (host cron / heartbeat): one pass, flush Drive writes, exit.
+  echo "One-shot run (backend: $(python3 config.py backend))."
+  run_once
+  fusermount3 -u /drive 2>/dev/null || true   # unmount flushes pending rclone uploads
+  exit 0
+fi
+
 echo "Sync loop every ${INTERVAL}s (backend: $(python3 config.py backend)). Ctrl-C to stop."
 while true; do
   # If the FUSE mount died, mirror/pending silently find nothing — bail so the restart
   # policy re-runs startup (and remounts) instead of looping over an empty /drive.
   grep -q " /drive " /proc/mounts || { echo "drive mount lost — exiting to restart" >&2; exit 1; }
-  git -C /work pull --ff-only || true
-  ./sync.sh run || echo "run failed this tick — continuing" >&2
-  git -C /work push || true
+  run_once
   sleep "$INTERVAL"
 done
