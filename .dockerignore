@@ -1,0 +1,29 @@
+# Keep the build context lean and keep secrets/personal data out of image layers.
+# (The Dockerfile only COPYs *.py, sync.sh, assets/, requirements.txt, deploy/entrypoint.sh —
+# this is defense in depth + a faster build.)
+.git
+.venv
+__pycache__
+*.pyc
+
+# secrets / personal config — must never enter an image
+.env
+config.toml
+deploy/loop.env
+deploy/rclone.conf
+handwriting/QUIRKS.md
+handwriting/key.md
+handwriting/reference/
+
+# runtime state + working dirs (regenerated; some are mounted as volumes at runtime)
+base/
+device/
+merge_out/
+checkin_pages/
+.backend_out/
+snapshots/
+out/
+digests/
+manifest.json
+processed_marks.json
+digest_state.json

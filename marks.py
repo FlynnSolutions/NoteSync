@@ -26,7 +26,9 @@ import json
 import time
 from pathlib import Path
 
-LEDGER = Path(__file__).resolve().parent / "processed_marks.json"
+import config
+
+LEDGER = config.state_dir() / "processed_marks.json"
 
 
 def mark_hash(mark: Path) -> str:

@@ -168,6 +168,13 @@ def digest_dir() -> Path:
     return _expand(_str("digest_dir", "SUPERNOTE_DIGEST_DIR")) or HERE / "digests"
 
 
+def state_dir() -> Path:
+    """Where mutable runtime state lives (the read-once ledger, digest state) — set this to
+    a mounted volume in a container so it survives restarts (else re-uploaded ink reprocesses
+    and digests re-fire). Default: next to the code."""
+    return _expand(_str("state_dir", "SUPERNOTE_STATE_DIR")) or HERE
+
+
 # --- shell bridge ---------------------------------------------------------
 _KEYS = {
     "source_base": source_base, "supernote_root": supernote_root,

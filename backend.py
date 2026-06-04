@@ -25,6 +25,7 @@ from pathlib import Path
 import config
 
 HERE = Path(__file__).resolve().parent
+TIMEOUT_S = 1200  # a slow agentic read runs minutes; cap it so a hang can't wedge the loop
 
 
 def read(system: list[dict], content: list[dict], *, max_tokens: int = 32000) -> str:
@@ -66,15 +67,19 @@ def _claude_code(system: list[dict], content: list[dict]) -> str:
 
     try:
         # Drop ANTHROPIC_API_KEY so `claude` authenticates with your Claude subscription
-        # (Max plan), not the metered API — read_ink may have loaded the key from .env.
+        # (Max plan), not the metered API — read_ink may have loaded the key from .env, and
+        # Claude Code bills the API key over the subscription token whenever it's present.
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        proc = subprocess.run(
-            ["claude", "-p", prompt, "--allowedTools", "Read", "Write",
-             "--output-format", "text"],
-            cwd=HERE, capture_output=True, text=True,
-            stdin=subprocess.DEVNULL,  # else `claude -p` blocks waiting on stdin
-            env=env,
-        )
+        try:
+            proc = subprocess.run(
+                ["claude", "-p", prompt, "--allowedTools", "Read", "Write",
+                 "--output-format", "text"],
+                cwd=HERE, capture_output=True, text=True,
+                stdin=subprocess.DEVNULL,  # else `claude -p` blocks waiting on stdin
+                env=env, timeout=TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired:
+            sys.exit(f"backend(claude_code): `claude -p` timed out after {TIMEOUT_S}s")
         if proc.returncode != 0:
             sys.exit(f"backend(claude_code): `claude -p` failed (exit {proc.returncode}):\n"
                      f"{proc.stderr.strip() or proc.stdout.strip()}")

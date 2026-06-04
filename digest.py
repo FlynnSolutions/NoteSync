@@ -39,7 +39,7 @@ import vcs
 from render import _parse_frontmatter
 
 HERE = Path(__file__).resolve().parent
-STATE = HERE / "digest_state.json"
+STATE = config.state_dir() / "digest_state.json"
 _DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 _SYSTEM = """\

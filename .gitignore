@@ -19,6 +19,8 @@ assets/fonts/*
 !assets/fonts/DejaVu-LICENSE.txt
 .env
 config.toml
+deploy/loop.env
+deploy/rclone.conf
 snapshots/
 handwriting/QUIRKS.md
 handwriting/key.md

@@ -3,11 +3,12 @@
 Goal: the sync loop runs unattended in the cloud, so docs mirror out and annotations get
 read back without your machine on.
 
-> **Status: scaffolding, NOT yet deployed or verified.** The artifacts here (Dockerfile,
-> entrypoint, compose) are a starting point. Standing this up needs *your* accounts and a
-> one-time auth you have to do interactively — see "What only you can do" below. Nothing
-> here has run in a real cloud; treat it as a reviewed design + starter kit, not a
-> turn-key deploy.
+> **This file is the *why* (the architecture decision). For the step-by-step runbook, see
+> [EC2-SETUP.md](./EC2-SETUP.md).**
+>
+> **Status: built, not yet deployed end-to-end.** The image builds and the loop logic is
+> verified locally; the live path needs *your* Google Drive OAuth + Claude token (one-time
+> interactive steps). Treat it as a tested kit + runbook, not a one-click deploy.
 
 ## The decision: a persistent container, not a Lambda
 
@@ -37,16 +38,19 @@ flagged as the "someday, if Drive becomes the bottleneck" direction.
 ## How the container loop works
 
 `entrypoint.sh` (this dir):
-1. Writes an `rclone.conf` from a secret and **mounts** your Drive at `/drive`.
-2. Exports `SUPERNOTE_ROOT=/drive/My Drive/Supernote`, `SUPERNOTE_SOURCE_BASE=/work`,
-   and `ANTHROPIC_API_KEY` (from secrets).
-3. Clones/pulls your **docs git repo** into `/work` (so applied edits are revertible
+1. **Mounts** your Drive at `/drive` via rclone (from a mounted `rclone.conf`).
+2. Clones/pulls your **docs git repo** into `/work` (so applied edits are revertible
    commits, per the safety model — and can be pushed back).
-4. Loops on an interval: `mirror` (render docs → device) → `pending` → `process --apply`
-   for any annotations the device has exported → commit/push doc edits.
+3. Loops on an interval: `./sync.sh run` = due digests → `mirror` (render docs → device) →
+   drain **every** doc with a pending annotation (read ink → 3-way merge → apply) → push.
 
-The image bundles the runtime deps: `poppler` (`pdftoppm`), `supernotelib`
-(`supernote-tool`), the bundled font, and the Python requirements.
+Auth is your **Claude subscription**, not the metered API: the container needs
+`CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and deliberately **unsets**
+`ANTHROPIC_API_KEY` — if set, it overrides the subscription token and bills the API.
+
+The image bundles the runtime deps: the **Claude Code CLI** (`claude`), `poppler`
+(`pdftoppm`), `supernotelib` (`supernote-tool`), the bundled font, and the Python
+requirements.
 
 ## What only you can do (the hard external dependencies)
 
@@ -58,18 +62,22 @@ These are why this can't be a turn-key autonomous deploy:
    (`--cap-add SYS_ADMIN --device /dev/fuse`).
 3. **Docs-repo write access:** a deploy key (or token) so the container can pull/push the
    notes git repo.
-4. **Anthropic API key** as a secret.
+4. **Claude subscription token** (`claude setup-token`) as a secret — not an API key.
 5. **Decide the cadence** (the loop interval) and the review posture — see below.
+
+(The full walkthrough for all five is in [EC2-SETUP.md](./EC2-SETUP.md).)
 
 ## Safety posture (carry the local guarantees into the cloud)
 
-- The loop runs `process --apply`, which is non-deterministic. Per the design, applied doc
-  edits should land as **revertible commits**, and ideally on a branch / as a PR rather
-  than straight to `main`, so an unattended misread is reviewable. Wire the container's
-  git identity + a branch before trusting it fully.
-- Conflicts already halt (markers, no auto-apply) — that protection holds in the cloud.
-- The read-once `.mark` ledger (`processed_marks.json`) must persist across container
-  restarts (mount it on a volume), or re-uploaded ink reprocesses.
+- The loop applies ink edits, which are non-deterministic reads. They land as **revertible
+  `supernote:` commits** in the notes repo (the container sets its git identity and pushes),
+  so any misread is `git revert`-able. Landing them on a review branch instead of `main` is
+  a worthwhile hardening if you want a human gate before they're canonical.
+- Conflicts already halt (markers in `merge_out/`, no auto-apply) — that protection holds in
+  the cloud; the doc stays pending until you resolve the source.
+- State that must survive restarts (the read-once `.mark` ledger + digest state) lives under
+  `SUPERNOTE_STATE_DIR=/state` on a named volume, or re-uploaded ink reprocesses and digests
+  re-fire. The notes repo persists on its own volume.
 
 ## Run it locally first (recommended before any cloud)
 
@@ -77,10 +85,10 @@ You can exercise the whole container on your own machine before paying for a hos
 
 ```bash
 cd deploy
-# one-time: create the gdrive rclone remote, then:
+# one-time: create the gdrive rclone remote + a Claude token, then:
 cp ~/.config/rclone/rclone.conf ./rclone.conf
-echo "ANTHROPIC_API_KEY=sk-..." > ./loop.env
-docker compose up --build      # mounts Drive, runs the loop
+cp loop.env.example loop.env && nano loop.env   # CLAUDE_CODE_OAUTH_TOKEN, DOCS_REPO
+docker compose up --build                 # mounts Drive, runs the loop
 ```
 
 If that works on your machine, the same image runs on any container host.
