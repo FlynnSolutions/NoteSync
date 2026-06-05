@@ -5,7 +5,7 @@
 #   ./sync.sh init        interactive first-run setup (paths + preferences -> config.toml)
 #   ./sync.sh mirror      render the whole doc tree -> PDFs into the Drive Library (matching paths) + manifest
 #   ./sync.sh run         do all due work: digests -> mirror -> drain ALL pending annotations (the heartbeat entry point)
-#   ./sync.sh watch       local auto-sync: on any .md change in the mirrored folders, mirror -> device + commit/push (run on your laptop)
+#   ./sync.sh watch       local sync engine (run on your laptop): edits -> device, device annotations -> docs, + the hybrid heartbeat
 #   ./sync.sh in [FILE]   extract a pending annotation's ink -> page PNGs for Claude to read
 #   ./sync.sh process REL [--apply]     hands-off: read ink via Claude API -> merge -> apply (needs ANTHROPIC_API_KEY)
 #   ./sync.sh reconcile REL [--apply]   3-way merge device edits into the source doc (conflict-aware)
@@ -65,9 +65,10 @@ case "$cmd" in
     ;;
 
   watch)
-    # Local auto-sync daemon (run on your laptop, keeps the cloud server optional):
-    # watch the mirrored doc folders and, on any .md change, mirror -> device + commit/push
-    # ONLY that file. Tightly scoped to config.scan_roots. `watch --dry-run` first. See watch.py.
+    # Local sync engine (run on your laptop; keeps the cloud server optional). Both directions:
+    # source .md change -> mirror to device + commit/push ONLY that file (scoped to scan_roots);
+    # new device annotation -> read back + 3-way merge. Plus the .laptop-alive heartbeat so the
+    # cloud standby defers while this runs. `watch --dry-run` first. See watch.py.
     "$PY" "$HERE/watch.py" "${@:2}"
     ;;
 

@@ -74,6 +74,18 @@ def _process_one(pdf: Path) -> tuple[str, str]:
     return (rel, "applied" if marks.is_processed(mark) else "conflict")
 
 
+def drain() -> list[tuple[str, str]]:
+    """Process every doc with a pending device annotation (extract -> read -> merge+apply).
+    Returns [(label, status)], status in applied|conflict|skipped. Empty if nothing pending.
+    Reused by the local watcher (watch.py) so device->desktop runs on the laptop too."""
+    return [_process_one(pdf) for pdf in _pending_all()]
+
+
+def summary(results: list[tuple[str, str]]) -> str:
+    counts = {s: sum(1 for _, st in results if st == s) for s in ("applied", "conflict", "skipped")}
+    return f"applied={counts['applied']} conflict={counts['conflict']} skipped={counts['skipped']}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -91,21 +103,15 @@ def main() -> None:
         print("  mirror failed (Supernote root not found?) — continuing")
 
     print("\n[3/3] pending annotations")
-    pending = _pending_all()
-    if not pending:
+    results = drain()
+    if not results:
         print("  none pending")
         return
-    print(f"  {len(pending)} doc(s) with pending ink")
-    results = [_process_one(pdf) for pdf in pending]
-
     print("\n== summary ==")
     for label, status in results:
         print(f"  {status:>8}  {label}")
-    applied = sum(1 for _, s in results if s == "applied")
-    conflict = sum(1 for _, s in results if s == "conflict")
-    skipped = sum(1 for _, s in results if s == "skipped")
-    print(f"  applied={applied} conflict={conflict} skipped={skipped}")
-    if conflict:
+    print(f"  {summary(results)}")
+    if any(s == "conflict" for _, s in results):
         print("  conflicts left markers in merge_out/ — resolve in the source, then re-run")
 
 

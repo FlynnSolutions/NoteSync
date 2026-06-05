@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-watch.py — auto-sync source docs to the Supernote on change, so you never have to remember
-to mirror or push.
+watch.py — the local sync engine: run it on your laptop and the whole round-trip happens
+locally (the cloud container is then just a standby for when the laptop's off). It does both
+directions plus the hybrid heartbeat:
+
+  - desktop -> device: on a debounced source `.md` change, mirror the changed doc(s) to the
+    device + commit/push ONLY those files (so the cloud stays current).
+  - device -> desktop: periodically read back any new device annotations (run.drain()) and
+    3-way-merge them into the source.
+  - heartbeat: stamp `.laptop-alive` so the cloud standby defers while this is running.
 
 Mechanical by design: it reacts to the FILE changing on disk, no matter who edited it (you,
 your editor, Claude) — nothing depends on anyone remembering to run anything. Scoped by
 design: it watches EXACTLY the docs `mirror` handles (`mirror.collect(scan_roots)` under
 source_base) and commits ONLY the changed files (path-scoped via vcs — never `git add -A`),
 so your other repos, projects, and markdown are never touched.
-
-On a debounced change it:
-  1. mirrors the changed doc(s) -> device (instant while your laptop is on), and
-  2. commits + pushes just those files so the cloud container stays current.
 
 Usage:
     python watch.py [--interval 3] [--debounce 8] [--dry-run]
@@ -30,10 +33,12 @@ from pathlib import Path
 import config
 import heartbeat
 import mirror
+import run
 import vcs
 
 HERE = Path(__file__).resolve().parent
 HEARTBEAT_EVERY_S = 60   # how often to stamp "laptop alive" for the cloud standby (hybrid)
+DRAIN_CHECK_EVERY_S = 20  # how often to check for new device annotations to read back
 
 
 def _snapshot() -> dict[Path, float]:
@@ -47,6 +52,19 @@ def _rel(p: Path) -> str:
         return str(p.relative_to(config.source_base()))
     except ValueError:
         return str(p)
+
+
+def _drain(dry_run: bool) -> None:
+    """Device -> desktop: read back any pending device annotations locally (the other half of
+    the local engine). Reuses run.drain(); the read-once ledger keeps it from reprocessing."""
+    if dry_run:
+        pend = run._pending_all()
+        if pend:
+            print(f"device: {len(pend)} annotation(s) pending — would read + merge")
+        return
+    results = run.drain()                 # no-op (empty) when nothing is pending
+    if results:
+        print(f"device: read {len(results)} annotation(s) -> {run.summary(results)}")
 
 
 def _sync(changed: list[Path], dry_run: bool) -> None:
@@ -87,20 +105,22 @@ def main() -> None:
     prev = _snapshot()
     pending: dict[Path, float] = {}    # changed file -> its latest mtime (for debounce)
     heartbeat.write()                  # tell the cloud standby "the laptop is on" right away
-    last_hb = time.time()
+    last_hb = last_drain = time.time()
 
     while True:
         time.sleep(args.interval)
+        now = time.time()
         # Keep the cloud standby deferring to this laptop while the watcher runs (hybrid).
-        if time.time() - last_hb >= HEARTBEAT_EVERY_S:
+        if now - last_hb >= HEARTBEAT_EVERY_S:
             heartbeat.write()
-            last_hb = time.time()
+            last_hb = now
+
+        # desktop -> device: render + push docs whose source changed (debounced).
         cur = _snapshot()
         for p, m in cur.items():
             if prev.get(p) != m:       # new or modified since last scan
                 pending[p] = m
         prev = cur
-        now = time.time()
         ready = [p for p, m in pending.items()
                  if now - m >= args.debounce and cur.get(p) == m]   # stable for debounce
         if ready:
@@ -109,6 +129,13 @@ def main() -> None:
                 pending.pop(p, None)
             if not args.dry_run:
                 prev = _snapshot()     # absorb mirror's own rederive writes (no echo loop)
+
+        # device -> desktop: read back any new annotations (throttled — not latency-critical).
+        if now - last_drain >= DRAIN_CHECK_EVERY_S:
+            last_drain = now
+            heartbeat.write()          # stay "alive" across a multi-minute ink read
+            last_hb = now
+            _drain(args.dry_run)
 
 
 if __name__ == "__main__":
