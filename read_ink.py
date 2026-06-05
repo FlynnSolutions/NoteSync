@@ -104,12 +104,17 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=None, help="output markdown (default: device/<rel>)")
     args = ap.parse_args()
 
-    _load_env()
-    if config.backend() == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("backend is 'api' but ANTHROPIC_API_KEY not set (export it, put it in "
-                 "supernote-sync/.env, or switch to the default claude_code backend)")
+    # Only touch .env / the API key on the metered backend — the default claude_code path
+    # never loads it, so a stray key can't leak into the subscription call.
+    if config.backend() == "api":
+        _load_env()
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            sys.exit("backend is 'api' but ANTHROPIC_API_KEY not set (export it, put it in "
+                     "supernote-sync/.env, or switch to the default claude_code backend)")
 
     rel = args.rel
+    if Path(rel).is_absolute() or ".." in Path(rel).parts:
+        sys.exit(f"unsafe rel (absolute or contains '..'): {rel}")
     base_path = BASE_DIR / rel
     if not base_path.exists():
         sys.exit(f"no base snapshot for {rel} (run `sync.sh mirror` first): {base_path}")

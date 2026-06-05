@@ -16,12 +16,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
-from pathlib import Path
 
 import config
 
 STORE = config.state_dir() / "questions.json"
+
+# The on-device wire format, defined ONCE here so the producers (inbox.py, render.py) and the
+# parser (run.py) can't drift: a question carries an `[id]` token and a confirm checkbox.
+ID_RE = re.compile(r"`\[([0-9a-f]{12})\]`")     # parse the [id] token back out of a doc
+CONFIRM_LINE = "- [ ] looks right as merged"    # the confirm checkbox emitted on both surfaces
+
+
+def id_token(qid: str) -> str:
+    """The `[id]` token shown next to a question (and matched by ID_RE on the way back)."""
+    return f"`[{qid}]`"
+
+
+def is_confirmed_line(line: str) -> bool:
+    """True if a line is the confirm checkbox, ticked (`- [x] ...`)."""
+    return line.strip().lower().startswith("- [x]")
 
 
 def _qid(doc_rel: str, context: str) -> str:
@@ -82,7 +97,3 @@ def resolve(qid: str) -> bool:
     if hit:
         _save(items)
     return hit
-
-
-def path() -> Path:
-    return STORE

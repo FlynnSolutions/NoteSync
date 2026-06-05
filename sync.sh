@@ -7,7 +7,7 @@
 #   ./sync.sh run         do all due work: digests -> mirror -> drain ALL pending annotations (the heartbeat entry point)
 #   ./sync.sh watch       local sync engine (run on your laptop): edits -> device, device annotations -> docs, + the hybrid heartbeat
 #   ./sync.sh in [FILE]   extract a pending annotation's ink -> page PNGs for Claude to read
-#   ./sync.sh process REL [--apply]     hands-off: read ink via Claude API -> merge -> apply (needs ANTHROPIC_API_KEY)
+#   ./sync.sh process REL [--apply]     hands-off: read ink via the configured backend (default: your Claude subscription) -> merge -> apply
 #   ./sync.sh reconcile REL [--apply]   3-way merge device edits into the source doc (conflict-aware)
 #   ./sync.sh digest [NAME]      generate "daily reading" digest(s) from recipes in digests/
 #   ./sync.sh calibrate [read]   handwriting scribble test: make the sheet (or read a filled one)
@@ -80,8 +80,9 @@ case "$cmd" in
     ;;
 
   process)
-    # Hands-off: read the ink via the Claude API -> device/<rel>, then 3-way
-    # merge + apply + re-mirror. Needs ANTHROPIC_API_KEY (env or .env). $2 = rel.
+    # Hands-off: read the ink via the configured backend (default: your Claude subscription
+    # via `claude -p`; no key needed) -> device/<rel>, then 3-way merge + apply + re-mirror.
+    # Set backend = "api" for the metered Anthropic SDK (then needs ANTHROPIC_API_KEY). $2 = rel.
     rel="${2:?usage: sync.sh process REL [--apply]}"
     "$PY" "$HERE/read_ink.py" --rel "$rel" || exit 1
     "$PY" "$HERE/reconcile.py" "$rel" "${@:3}"
@@ -114,7 +115,7 @@ case "$cmd" in
     echo; echo "Trip-back routing + conflict check:"
     "$PY" "$HERE/route.py" "$pdf"
     echo
-    echo "Next: automated  -> ./sync.sh process <rel> --apply   (reads ink via Claude API + merges)"
+    echo "Next: automated  -> ./sync.sh process <rel> --apply   (reads ink on your Claude subscription + merges)"
     echo "      or manual   -> Claude reads checkin_pages/ink/*.png and writes device/<rel>, then reconcile"
     ;;
 

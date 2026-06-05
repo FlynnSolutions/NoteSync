@@ -124,12 +124,14 @@ def _state() -> dict:
 
 
 def _claude_digest(instructions: str, context: str) -> str:
-    import read_ink  # reuse its .env loader (for the api backend's key)
-
-    read_ink._load_env()
-    if config.backend() == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("backend is 'api' but ANTHROPIC_API_KEY not set (env or "
-                         "supernote-sync/.env, or switch to the default claude_code backend)")
+    # Only load .env / the API key on the metered backend; the default subscription path
+    # never touches it (so a stray key can't leak into the claude_code call).
+    if config.backend() == "api":
+        import read_ink
+        read_ink._load_env()
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise SystemExit("backend is 'api' but ANTHROPIC_API_KEY not set (env or "
+                             "supernote-sync/.env, or switch to the default claude_code backend)")
     style = f"Emoji preference: {config.emoji()}."
     user = f"{instructions}\n\n{style}\n\n--- CONTEXT ---\n{context}\n--- END CONTEXT ---\n\nWrite the digest."
     system = [{"type": "text", "text": _SYSTEM}]

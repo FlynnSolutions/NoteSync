@@ -151,6 +151,8 @@ def main() -> None:
     args = ap.parse_args()
 
     rel = args.source_rel
+    if Path(rel).is_absolute() or ".." in Path(rel).parts:
+        sys.exit(f"unsafe rel (absolute or contains '..'): {rel}")
     base = BASE_DIR / rel
     src = source_path(rel)
     dev = Path(args.device) if args.device else DEVICE_DIR / rel

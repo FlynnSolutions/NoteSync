@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import subprocess
 import sys
@@ -37,7 +36,6 @@ PY = sys.executable
 MANIFEST = HERE / "manifest.json"
 CHECKIN = HERE / "checkin_pages"
 DEVICE_DIR = HERE / "device"
-_INBOX_ID_RE = re.compile(r"`\[([0-9a-f]{12})\]`")
 
 
 def _script(name: str, *a: str) -> int:
@@ -79,10 +77,10 @@ def _inbox_confirmations(text: str) -> list[str]:
     """Question ids whose '- [x] looks right' box the user checked on the inbox doc."""
     cur, confirmed = None, []
     for line in text.splitlines():
-        m = _INBOX_ID_RE.search(line)
+        m = questions.ID_RE.search(line)
         if m:
             cur = m.group(1)
-        elif cur and line.strip().lower().startswith("- [x]"):
+        elif cur and questions.is_confirmed_line(line):
             confirmed.append(cur)
             cur = None
     return confirmed

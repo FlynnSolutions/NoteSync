@@ -19,6 +19,8 @@ import json
 import sys
 from pathlib import Path
 
+import config
+
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / "manifest.json"
 BASE_DIR = HERE / "base"
@@ -34,16 +36,26 @@ def main() -> None:
     if not MANIFEST.exists():
         sys.exit("No manifest.json — run `sync.sh mirror` first.")
 
-    stem = Path(sys.argv[1]).stem
+    arg = Path(sys.argv[1])
     manifest = json.loads(MANIFEST.read_text())
-    hits = [e for e in manifest if Path(e["pdf"]).stem == stem]
+    # Match by full relative path when given a Library PDF (many docs share a basename like
+    # README/CLAUDE); fall back to basename only for a bare filename.
+    library = config.library()
+    rel = None
+    if library is not None:
+        try:
+            rel = str(arg.relative_to(library))
+        except ValueError:
+            rel = None
+    hits = ([e for e in manifest if e["pdf"] == rel] if rel is not None
+            else [e for e in manifest if Path(e["pdf"]).stem == arg.stem])
 
     if not hits:
-        print(f"  No manifest entry for '{stem}'.")
+        print(f"  No manifest entry for '{arg.name}'.")
         print("  (Likely the legacy checklist or a file not produced by `mirror`.)")
         return
     if len(hits) > 1:
-        print(f"  AMBIGUOUS: {len(hits)} sources share the name '{stem}':")
+        print(f"  AMBIGUOUS: {len(hits)} sources share the name '{arg.name}':")
         for h in hits:
             print(f"    - {h['source_rel']}")
         print("  Disambiguate by relative path before applying.")

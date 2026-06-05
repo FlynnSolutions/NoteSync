@@ -19,6 +19,7 @@ from datetime import datetime
 from fpdf import FPDF
 
 import config
+import questions
 from common import (
     CHECK_STATES,
     FONT,
@@ -292,8 +293,8 @@ def _question_page_lines(qs: list[dict]) -> list[str]:
              "> This doc's last merge wasn't certain. Write your answer under each question,",
              "> then export — it applies on the next sync and this page disappears.", ""]
     for q in qs:
-        lines += [f"**Q `[{q['id']}]`:** {q['question']}", "",
-                  "- [ ] looks right as merged", "",
+        lines += [f"**Q {questions.id_token(q['id'])}:** {q['question']}", "",
+                  questions.CONFIRM_LINE, "",
                   "_Your answer / correction:_", "", "", ""]
     return lines
 

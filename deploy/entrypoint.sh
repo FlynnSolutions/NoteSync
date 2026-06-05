@@ -20,7 +20,7 @@ set -euo pipefail
 
 : "${CLAUDE_CODE_OAUTH_TOKEN:?set CLAUDE_CODE_OAUTH_TOKEN (run \`claude setup-token\` on a machine with a browser)}"
 : "${DOCS_REPO:?set DOCS_REPO (git URL of your notes repo)}"
-unset ANTHROPIC_API_KEY            # force the subscription; never the metered API
+unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL   # force the subscription
 RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
 INTERVAL="${LOOP_INTERVAL:-300}"
 RUN_MODE="${RUN_MODE:-loop}"       # loop = self-scheduled; oneshot = one pass then exit

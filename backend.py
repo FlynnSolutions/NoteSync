@@ -66,10 +66,11 @@ def _claude_code(system: list[dict], content: list[dict]) -> str:
     prompt = "\n\n".join(parts)
 
     try:
-        # Drop ANTHROPIC_API_KEY so `claude` authenticates with your Claude subscription
-        # (Max plan), not the metered API — read_ink may have loaded the key from .env, and
-        # Claude Code bills the API key over the subscription token whenever it's present.
-        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        # Drop the whole ANTHROPIC_* family (API key, AUTH_TOKEN, BASE_URL) so `claude`
+        # authenticates with your Claude subscription (Max plan), not the metered API or a
+        # redirected endpoint — Claude Code prefers any of those over the subscription token
+        # when present. CLAUDE_CODE_OAUTH_TOKEN (the subscription) is kept.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
         try:
             proc = subprocess.run(
                 ["claude", "-p", prompt, "--allowedTools", "Read", "Write",

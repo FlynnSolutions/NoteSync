@@ -19,9 +19,9 @@ _EMPTY = _FRONT + "Nothing needs you right now — all merges were confident.\n"
 
 
 def _block(q: dict) -> str:
-    return (f"\n## {q['doc_rel']}  `[{q['id']}]`\n\n"
+    return (f"\n## {q['doc_rel']}  {questions.id_token(q['id'])}\n\n"
             f"**{q['question']}**\n\n"
-            f"- [ ] looks right as merged\n\n"
+            f"{questions.CONFIRM_LINE}\n\n"
             f"_Your answer / correction:_\n\n\n")
 
 
