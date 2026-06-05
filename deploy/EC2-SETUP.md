@@ -45,7 +45,6 @@ default). No double-processing, no races; fail-safe if the laptop crashes. Tune 
   ```cron
   */10 * * * * docker run --rm --cap-drop ALL --security-opt no-new-privileges \
       -v /home/ubuntu/supernote-sync/deploy/rclone.conf:/root/.config/rclone/rclone.conf:ro \
-      -v /home/ubuntu/supernote-sync/deploy/deploy_key:/run/secrets/deploy_key:ro \
       -v sync-work:/work -v sync-state:/state -v sync-drive:/drive \
       --env-file /home/ubuntu/supernote-sync/deploy/loop.env -e RUN_MODE=oneshot supernote-sync
   ```
@@ -89,15 +88,17 @@ of them to the host.
    ```
    This writes `~/.config/rclone/rclone.conf`. You'll copy that file to the host.
 
-3. **A notes git repo** (`DOCS_REPO`) — your source `.md` docs live here; applied ink edits
-   are committed as revertible `supernote:` commits and pushed back. Auth is an **SSH
-   deploy-key** (no token in any URL/log):
+3. **Your notes repos** — your source `.md` docs, **one private git repo per scan_root** (e.g.
+   `RealtimeMFG`, `hq`). If a repo isn't on a remote yet, push it:
    ```bash
-   ssh-keygen -t ed25519 -f deploy_key -N ""   # creates deploy_key (+ deploy_key.pub)
+   # in each notes repo, e.g. ~/Projects/RealtimeMFG:
+   git remote add origin https://github.com/you/realtimemfg.git && git push -u origin HEAD
    ```
-   Add `deploy_key.pub` as a **deploy key with write access** on the repo (GitHub → repo →
-   Settings → Deploy keys), set `DOCS_REPO=git@github.com:you/notes.git`, and you'll copy the
-   private `deploy_key` to the host (next section).
+   Then create a GitHub **fine-grained PAT** with **Contents: read + write** scoped to those
+   repos. In `loop.env` set: `DOCS_REPOS=RealtimeMFG=<url>,hq=<url>`,
+   `SUPERNOTE_SCAN_ROOTS=RealtimeMFG,hq`, and `GITHUB_TOKEN=<the PAT>`. The token is used via a
+   git credential helper — never in a repo URL/`.git/config`/log. (One repo only? An SSH
+   deploy-key also works, but a PAT is simplest across several.)
 
 ## Stand up the host
 
@@ -129,9 +130,9 @@ nano loop.env            # paste CLAUDE_CODE_OAUTH_TOKEN, set DOCS_REPO
 container can't reach Drive and step 4 fails at the first sync:
 ```bash
 scp ~/.config/rclone/rclone.conf ubuntu@<instance-ip>:~/supernote-sync/deploy/rclone.conf
-scp deploy_key                    ubuntu@<instance-ip>:~/supernote-sync/deploy/deploy_key
 ```
-`loop.env`, `rclone.conf`, and `deploy_key` are all gitignored — keep them only on the host.
+(`GITHUB_TOKEN` goes in `loop.env`, not a separate file.) `loop.env` and `rclone.conf` are
+gitignored — keep them only on the host.
 
 ### 4. Run it
 ```bash
@@ -164,9 +165,9 @@ You should see the first Drive sync, the docs repo clone, and a `== supernote-sy
   walk away," not instant.
 
 ## Security
-- `loop.env` holds your Claude token; `rclone.conf` holds Google Drive OAuth; `deploy_key` is
-  your repo's SSH key. Anyone with the host can act as you on all three — lock SSH down
-  (key-only, restricted source IP) and keep the secrets off a shared box.
+- `loop.env` holds your Claude token + the GitHub PAT; `rclone.conf` holds Google Drive OAuth.
+  Anyone with the host can act as you on all of it — lock SSH down (key-only, restricted source
+  IP) and keep the secrets off a shared box.
 - The container runs **unprivileged** (`cap_drop: ALL` + `no-new-privileges`, no FUSE/SYS_ADMIN)
   — safe to run alongside other things on the box. Running it as a non-root *user* is a further
   hardening step (needs the rclone.conf path + volume ownership adjusted); not done yet.

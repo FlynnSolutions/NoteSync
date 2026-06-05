@@ -6,10 +6,10 @@
 FROM python:3.13-slim
 
 # Runtime deps: poppler (pdftoppm), rclone (Drive API — copy, NOT a FUSE mount, so no
-# SYS_ADMIN needed), git + openssh-client (SSH deploy-key), ripgrep + jq (Claude Code),
+# SYS_ADMIN needed), git (HTTPS + PAT via credential helper), ripgrep + jq (Claude Code),
 # curl/ca-certs (Claude installer), libcairo2 (pycairo via supernotelib -> svglib -> rlpycairo).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        poppler-utils rclone git openssh-client ripgrep jq curl ca-certificates libcairo2 \
+        poppler-utils rclone git ripgrep jq curl ca-certificates libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI — the claude_code backend shells out to `claude -p`. The official

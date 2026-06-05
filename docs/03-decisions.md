@@ -16,16 +16,17 @@ sync-with-delete; the cost is that consumed exports linger on Drive, which is ha
 the read-once ledger (`marks.py`) already ignores them. (Running as a non-root *user* is a
 further step, deferred — it needs the rclone.conf path + volume ownership reworked.)
 
-### ADR-015 — Cloud git auth: SSH deploy-key, not a token in the URL
-The container needs write access to the notes repo. Decision: an **SSH deploy-key** (a key
-scoped to that one repo, mounted read-only at `/run/secrets/deploy_key`, used via
-`GIT_SSH_COMMAND`). Rejected the simpler **HTTPS-token-in-URL** (`https://user:token@host`): an
-audit found that token leaks into git/`.git/config` and any error output (which on a cloud host
-flows to CloudWatch/journald). With SSH the secret never appears in a URL, config, or log;
-`StrictHostKeyChecking=accept-new` trusts the host on first connect (fine for a personal box).
-Defense-in-depth: the backend still redacts `scheme://user:TOKEN@host` from any diagnostic it
-prints. (Note: git auth is for the *notes repo* — unrelated to the device, which only talks to
-Google Drive.)
+### ADR-015 — Cloud git auth: keep the token out of the URL (PAT-via-credential-helper for N repos)
+The container needs write access to the notes repo(s). The notes can span **several** repos (one
+per `scan_root`), and GitHub deploy keys are **one-per-repo**, so a single deploy-key doesn't
+scale. Decision: a **fine-grained PAT** (scoped to those repos, Contents read+write) supplied via
+git's **credential helper** — one secret for any number of repos, and the token never lands in a
+repo URL, `.git/config`, or log (the helper holds it in a `600` file). Rejected: HTTPS-token-**in
+the URL** (`https://user:token@host`), which an audit found leaks into `.git/config` and error
+output (→ CloudWatch/journald). For a **single** repo an **SSH deploy-key** is an equally clean
+alternative (also no token in URL/log). Defense-in-depth: the backend still redacts
+`scheme://user:TOKEN@host` from any diagnostic. (Git auth is for the *notes repos* — unrelated to
+the device, which only talks to Google Drive.)
 
 ### ADR-014 — Conflict resolution: eager auto-merge, then ask via injected surfaces  *(extends ADR-008)*
 A true same-region collision no longer stops at conflict markers. The system (1) **eagerly**

@@ -16,7 +16,6 @@ services:
     security_opt: ["no-new-privileges:true"]
     volumes:
       - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
-      - ./deploy_key:/run/secrets/deploy_key:ro   # SSH deploy-key for the notes repo (gitignored)
       - sync-state:/state                  # read-once ledger + digest state (survive restarts)
       - sync-work:/work                    # the docs repo (revertible edits live here)
       - sync-drive:/drive                  # local working copy of the Supernote Drive folder
