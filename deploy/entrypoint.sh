@@ -25,6 +25,12 @@ export SUPERNOTE_ROOT="/drive/${DRIVE_PATH}"       # local working copy of that 
 INTERVAL="${LOOP_INTERVAL:-300}"
 RUN_MODE="${RUN_MODE:-loop}"
 
+# The folders to mirror ARE the DOCS_REPOS subpaths — derive them so you don't repeat (or
+# mismatch) the list. Override SUPERNOTE_SCAN_ROOTS only in the rare case they should differ.
+_subs=""; IFS=',' read -ra _r <<< "$DOCS_REPOS"
+for _p in "${_r[@]}"; do _subs="${_subs:+$_subs,}${_p%%=*}"; done
+export SUPERNOTE_SCAN_ROOTS="${SUPERNOTE_SCAN_ROOTS:-$_subs}"
+
 mkdir -p "$SUPERNOTE_ROOT" /work /state
 
 # Git identity + auth. A fine-grained PAT via the credential helper keeps the token out of any

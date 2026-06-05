@@ -10,6 +10,11 @@ a few minutes the host reads the ink on your **Claude subscription** (no metered
 > Google Drive OAuth and Claude token (steps you must do interactively). Treat this as a
 > tested kit + runbook, not a one-click deploy.
 
+**What you need (at a glance):** a small always-on box (Lightsail/EC2, ~$5–10/mo) + **three
+credentials** — a Claude subscription token (`claude setup-token`), a Google Drive `rclone.conf`
+(`rclone config`), and a GitHub PAT for your notes repo(s). Fill three lines in `loop.env`, mount
+`rclone.conf`, `docker compose up`. The detail below is just walking those through.
+
 ## How it works (the shape)
 
 ```
@@ -95,10 +100,10 @@ of them to the host.
    git remote add origin https://github.com/you/realtimemfg.git && git push -u origin HEAD
    ```
    Then create a GitHub **fine-grained PAT** with **Contents: read + write** scoped to those
-   repos. In `loop.env` set: `DOCS_REPOS=RealtimeMFG=<url>,hq=<url>`,
-   `SUPERNOTE_SCAN_ROOTS=RealtimeMFG,hq`, and `GITHUB_TOKEN=<the PAT>`. The token is used via a
-   git credential helper — never in a repo URL/`.git/config`/log. (One repo only? An SSH
-   deploy-key also works, but a PAT is simplest across several.)
+   repos. In `loop.env` set `DOCS_REPOS=RealtimeMFG=<url>,hq=<url>` and `GITHUB_TOKEN=<the PAT>`
+   — that's it; the folders to mirror are taken from the `DOCS_REPOS` subpaths automatically.
+   The token is used via a git credential helper — never in a repo URL/`.git/config`/log. (One
+   repo only? An SSH deploy-key also works, but a PAT is simplest across several.)
 
 ## Stand up the host
 
