@@ -5,6 +5,7 @@
 #   ./sync.sh init        interactive first-run setup (paths + preferences -> config.toml)
 #   ./sync.sh mirror      render the whole doc tree -> PDFs into the Drive Library (matching paths) + manifest
 #   ./sync.sh run         do all due work: digests -> mirror -> drain ALL pending annotations (the heartbeat entry point)
+#   ./sync.sh repos       show your cloud source repos + push state, and print the DOCS_REPOS line for loop.env
 #   ./sync.sh watch       local sync engine (run on your laptop): edits -> device, device annotations -> docs, + the hybrid heartbeat
 #   ./sync.sh in [FILE]   extract a pending annotation's ink -> page PNGs for Claude to read
 #   ./sync.sh process REL [--apply]     hands-off: read ink via the configured backend (default: your Claude subscription) -> merge -> apply
@@ -62,6 +63,12 @@ case "$cmd" in
     # mirror -> drain EVERY pending annotation (read on your Claude subscription,
     # 3-way merge, apply). Conflicts are left for manual resolution. See run.py.
     "$PY" "$HERE/run.py" "${@:2}"
+    ;;
+
+  repos)
+    # Show your cloud source repos + their push state, and print the DOCS_REPOS line for the
+    # container's loop.env. Re-run after adding a project — the list maintains itself. See repos.py.
+    "$PY" "$HERE/repos.py" "${@:2}"
     ;;
 
   watch)

@@ -94,16 +94,14 @@ of them to the host.
    This writes `~/.config/rclone/rclone.conf`. You'll copy that file to the host.
 
 3. **Your notes repos** — your source `.md` docs, **one private git repo per scan_root** (e.g.
-   `RealtimeMFG`, `hq`). If a repo isn't on a remote yet, push it:
-   ```bash
-   # in each notes repo, e.g. ~/Projects/RealtimeMFG:
-   git remote add origin https://github.com/you/realtimemfg.git && git push -u origin HEAD
-   ```
-   Then create a GitHub **fine-grained PAT** with **Contents: read + write** scoped to those
-   repos. In `loop.env` set `DOCS_REPOS=RealtimeMFG=<url>,hq=<url>` and `GITHUB_TOKEN=<the PAT>`
-   — that's it; the folders to mirror are taken from the `DOCS_REPOS` subpaths automatically.
-   The token is used via a git credential helper — never in a repo URL/`.git/config`/log. (One
-   repo only? An SSH deploy-key also works, but a PAT is simplest across several.)
+   `RealtimeMFG`, `hq`). Run **`./sync.sh repos`** — it surveys your scan_roots, tells you which
+   still need a remote (with the exact `gh repo create … --push` command for each), and once
+   they're all on remotes, **prints the exact `DOCS_REPOS=` line to paste into `loop.env`**
+   (re-run it anytime you add a project — the list maintains itself, and it flags any repo with
+   unpushed commits so the cloud is never stale). Then create a GitHub **fine-grained PAT**
+   (**Contents: read + write**, scoped to those repos) and set `GITHUB_TOKEN=<the PAT>` in
+   `loop.env`. The token is used via a git credential helper — never in a repo URL/`.git/config`
+   /log. (One repo only? An SSH deploy-key also works, but a PAT is simplest across several.)
 
 ## Stand up the host
 
