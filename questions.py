@@ -24,10 +24,10 @@ import config
 STORE = config.state_dir() / "questions.json"
 
 
-def _qid(doc_rel: str, device: str) -> str:
-    """Stable id from the doc + the device ink we're asking about — so the same unresolved
-    conflict doesn't pile up duplicate questions across reconcile runs."""
-    return hashlib.sha256(f"{doc_rel}\0{device}".encode()).hexdigest()[:12]
+def _qid(doc_rel: str, context: str) -> str:
+    """Stable id from the doc + the conflict context — so the same unresolved conflict
+    doesn't pile up duplicate questions across reconcile runs."""
+    return hashlib.sha256(f"{doc_rel}\0{context}".encode()).hexdigest()[:12]
 
 
 def _load() -> list[dict]:
@@ -43,18 +43,18 @@ def _save(items: list[dict]) -> None:
     STORE.write_text(json.dumps(items, indent=2), encoding="utf-8")
 
 
-def record(doc_rel: str, question: str, *, base: str, laptop: str, device: str) -> str:
-    """Log an open question for an unresolvable conflict; idempotent on (doc, device ink).
-    base/laptop/device are the three conflicting versions, kept for context + resolution.
-    Returns the question id."""
-    qid = _qid(doc_rel, device)
+def record(doc_rel: str, question: str, *, context: str) -> str:
+    """Log an open question for an uncertain merge; idempotent on (doc, conflict context).
+    `question` is the human-facing ask/recommendation; `context` is the diff3 conflict text
+    (shown on the surfaces, and enough to re-resolve if the user clarifies). Returns the id."""
+    qid = _qid(doc_rel, context)
     items = _load()
     if any(q["id"] == qid and q["status"] == "open" for q in items):
         return qid
     items.append({
         "id": qid, "doc_rel": doc_rel, "status": "open",
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "question": question, "base": base, "laptop": laptop, "device": device,
+        "question": question, "context": context,
     })
     _save(items)
     return qid

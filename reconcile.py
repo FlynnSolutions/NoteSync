@@ -30,9 +30,11 @@ import sys
 import time
 from pathlib import Path
 
+import backend
 import config
 import derive
 import marks
+import questions
 import vcs
 
 HERE = Path(__file__).resolve().parent
@@ -84,6 +86,48 @@ def _consume_marks(rel: str) -> None:
         print(f"  consumed: {export.name}")
 
 
+_RESOLVE_SYSTEM = """\
+You resolve a 3-way merge conflict in a Markdown document. The document is given with git
+diff3 conflict markers — for each region: the LAPTOP (desktop) version is between <<<<<<< and
+|||||||, the common BASE between ||||||| and =======, and the DEVICE version (the user's
+latest handwritten edit) between ======= and >>>>>>>.
+
+Resolve EVERY conflict region into the single edit the user most likely intends. Keep both
+sides' independent changes where they don't truly collide; never silently drop content. The
+device side is the user's newest handwriting and usually wins on the exact thing it targets.
+
+Output the COMPLETE resolved document with every conflict marker removed — nothing else, no
+code fences. Begin your output with EXACTLY ONE line, then the document on the next line:
+  <!-- RESOLVE: confident -->                          when the merge is unambiguous
+  <!-- RESOLVE: uncertain | <one sentence: what you did + your recommendation> -->   otherwise\
+"""
+
+
+def _resolve(rel: str, conflicted: str) -> tuple[str, bool, str] | None:
+    """Ask Claude to resolve diff3 conflict markers (eager). Returns (resolved_doc, confident,
+    note); None if the model call failed, so the caller falls back to writing markers."""
+    system = [{"type": "text", "text": _RESOLVE_SYSTEM}]
+    content = [{"type": "text", "text": f"Resolve the conflicts in `{rel}`:\n\n{conflicted}"}]
+    try:
+        out = backend.read(system, content).strip()
+    except (SystemExit, Exception):
+        return None
+    if out.startswith("```"):                       # strip accidental code fences
+        out = out.split("\n", 1)[1] if "\n" in out else out
+        if out.rstrip().endswith("```"):
+            out = out.rstrip()[:-3]
+    out = out.lstrip()
+    confident, note = True, ""
+    if out.startswith("<!-- RESOLVE"):
+        line, _, out = out.partition("\n")
+        confident = "uncertain" not in line.lower()
+        if "|" in line:
+            note = line.split("|", 1)[1].replace("-->", "").strip()
+    else:
+        confident, note = False, "auto-merged (no confidence signal returned — please review)"
+    return out.strip() + "\n", confident, note
+
+
 def snapshot(src: Path, rel: str) -> None:
     dst = SNAP_DIR / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +142,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("source_rel", help="path relative to source_base, e.g. notes/todo.md")
     ap.add_argument("--device", help="ink-interpreted markdown (default: device/<rel>)")
-    ap.add_argument("--apply", action="store_true", help="write the clean merge to the source + re-mirror")
+    ap.add_argument("--apply", action="store_true",
+                    help="write the merge (clean or auto-resolved) to the source + re-mirror")
     args = ap.parse_args()
 
     rel = args.source_rel
@@ -111,29 +156,40 @@ def main() -> None:
             sys.exit(f"missing {label}: {p}\n  (run `sync.sh mirror` for base, and write the device edit first)")
 
     merged, conflicts = three_way(src, base, dev)
-    if conflicts == 0:
-        # Derived content (self-labeled counts + Total) is recomputed from the merged
-        # doc, never merged or LLM-guessed — so an ink/laptop status change keeps the
-        # stats honest and the stats block stops being a conflict source. See derive.py.
-        merged = derive.rederive(merged)
     print(f"3-way merge of {rel}: {'CLEAN' if conflicts == 0 else f'{conflicts} CONFLICT region(s)'}")
 
+    confident, note, conflict_ctx = True, "", merged   # conflict_ctx = the diff3 text (pre-resolve)
     if conflicts > 0:
-        out = MERGE_OUT / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(merged)
-        print(f"  Conflict markers written to: {out}")
-        print("  Same region was edited on both the laptop and the device. Resolve the")
-        print("  <<<<<<< / ||||||| (base) / ======= / >>>>>>> blocks in the SOURCE, then re-mirror.")
-        return
+        # Try to resolve it ourselves (eager). Only if the model is unavailable do we fall
+        # back to the old behavior: write markers and don't apply.
+        print("  attempting auto-resolution (eager) ...")
+        resolved = _resolve(rel, merged)
+        if resolved is None:
+            out = MERGE_OUT / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(merged)
+            print(f"  auto-resolution unavailable; conflict markers written to: {out}")
+            print("  Resolve the <<<<<<< / ======= / >>>>>>> blocks in the SOURCE, then re-mirror.")
+            return
+        merged, confident, note = resolved
+
+    # Derived content (self-labeled counts + Total) is recomputed from the merged doc, never
+    # merged or LLM-guessed — so a status change stays honest and isn't a conflict source.
+    merged = derive.rederive(merged)
 
     if not args.apply:
-        print("  Clean. Re-run with --apply to write it to the source and re-mirror.")
+        if conflicts:
+            print(f"  would auto-resolve ({'confident' if confident else 'UNCERTAIN: ' + note}).")
+        print("  Re-run with --apply to write it to the source and re-mirror.")
         return
 
     snapshot(src, rel)
     src.write_text(merged)
     print(f"  Applied -> {src}")
+    if conflicts and not confident:
+        # Eager apply done, but flag it for review on the question surfaces (brick 3/4).
+        qid = questions.record(rel, note or "Please review this auto-merge.", context=conflict_ctx)
+        print(f"  uncertain merge — logged question {qid} for your review: {note}")
     if vcs.commit_paths([src], f"supernote: apply ink edits to {rel}"):
         print(f"  committed: {rel} (revertible in the docs repo)")
     _consume_marks(rel)   # mark processed so re-mirror can refresh the PDF (un-protect it)
