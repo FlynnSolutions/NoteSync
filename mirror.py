@@ -24,6 +24,7 @@ from pathlib import Path
 
 import config
 import derive
+import inbox
 import marks
 import vcs
 from render import render_bytes
@@ -105,6 +106,9 @@ def main() -> None:
     library = _gdrive_library()
     if library is None and not args.dry_run:
         sys.exit("Google Drive mount not found.")
+
+    if not args.dry_run:
+        inbox.build()   # refresh the "needs you" doc so open questions ride out with this mirror
 
     roots = args.root or SCAN_ROOTS
     docs = collect(roots)

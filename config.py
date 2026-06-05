@@ -175,6 +175,18 @@ def state_dir() -> Path:
     return _expand(_str("state_dir", "SUPERNOTE_STATE_DIR")) or HERE
 
 
+def inbox() -> Path:
+    """The generated "needs you" inbox doc (open conflict questions). Lives under a scan_root
+    so it mirrors to the device. Override with SUPERNOTE_INBOX / config `inbox` (relative to
+    source_base, or absolute)."""
+    v = _str("inbox", "SUPERNOTE_INBOX")
+    if v:
+        p = Path(os.path.expanduser(v))
+        return p if p.is_absolute() else source_base() / v
+    roots = scan_roots()
+    return source_base() / (roots[0] if roots else "") / "SUPERNOTE-INBOX.md"
+
+
 # --- shell bridge ---------------------------------------------------------
 _KEYS = {
     "source_base": source_base, "supernote_root": supernote_root,
