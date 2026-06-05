@@ -317,10 +317,14 @@ def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
     # the next page rather than splitting a heading from its content, and leaves more
     # bottom-of-page room to annotate. Oversized sections (taller than a page) render
     # normally. Measured by a throwaway render — robust, and handles tables uniformly.
-    for section in _split_sections(md_text.splitlines()):
-        h = _section_height(section, usable, doc_format)
-        if h is not None and pdf.get_y() > TOP_MARGIN_MM + 0.5 and pdf.get_y() + h > bottom:
-            pdf.add_page()
+    for idx, section in enumerate(_split_sections(md_text.splitlines())):
+        if doc_format == "inbox":
+            if idx > 0:                  # one section (question) per page: enables deterministic
+                pdf.add_page()           # per-page answer detection (no LLM) — see run._process_inbox
+        else:
+            h = _section_height(section, usable, doc_format)
+            if h is not None and pdf.get_y() > TOP_MARGIN_MM + 0.5 and pdf.get_y() + h > bottom:
+                pdf.add_page()
         _render_lines(pdf, section, usable)
     return pdf
 

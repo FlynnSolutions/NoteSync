@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 
 import config
+import inbox
+import marklayer
 import marks
 import questions
 import reconcile
@@ -35,7 +37,6 @@ HERE = Path(__file__).resolve().parent
 PY = sys.executable
 MANIFEST = HERE / "manifest.json"
 CHECKIN = HERE / "checkin_pages"
-DEVICE_DIR = HERE / "device"
 
 
 def _script(name: str, *a: str) -> int:
@@ -73,35 +74,24 @@ def _is_inbox(rel: str) -> bool:
         return False
 
 
-def _inbox_confirmations(text: str) -> list[str]:
-    """Question ids whose '- [x] looks right' box the user checked on the inbox doc."""
-    cur, confirmed = None, []
-    for line in text.splitlines():
-        m = questions.ID_RE.search(line)
-        if m:
-            cur = m.group(1)
-        elif cur and questions.is_confirmed_line(line):
-            confirmed.append(cur)
-            cur = None
-    return confirmed
-
-
 def _process_inbox(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
-    """The inbox is a question dashboard, not a source doc — so we don't merge it. We read it
-    to see which '- [x] looks right' boxes the user checked and resolve those questions (the
-    eager merge already applied). Free-text corrections in the inbox aren't applied here —
-    write those on the conflicted doc's own page-1 instead. (Unverified without a device.)"""
+    """The inbox is a question dashboard, not a source doc — so we don't merge it, and we read
+    it DETERMINISTICALLY (no LLM): it renders one question per page (format: inbox), so a page
+    that got ink = that question confirmed. marklayer gives per-page ink; inbox.ORDER maps page
+    N -> question id. Resolve the confirmed ones; unanswered pages stay open and come back next
+    inbox. (Free-text corrections go on the conflicted doc's own page-1 instead.)"""
     shutil.rmtree(CHECKIN, ignore_errors=True)
     if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
         return (rel, "skipped")
-    if _script("read_ink.py", "--rel", rel) != 0:
-        return (rel, "skipped")
-    read_out = DEVICE_DIR / rel
-    confirmed = _inbox_confirmations(read_out.read_text(encoding="utf-8")) if read_out.exists() else []
-    for qid in confirmed:
-        questions.resolve(qid)
+    order = json.loads(inbox.ORDER.read_text()) if inbox.ORDER.exists() else []
+    stem = Path(rel).stem
+    confirmed = 0
+    for i, qid in enumerate(order):                  # question i is rendered on PDF page i+1
+        if marklayer.has_ink(CHECKIN / "ink" / f"{stem}-p{i + 1}.png"):
+            questions.resolve(qid)
+            confirmed += 1
     reconcile._consume_marks(rel)   # mark the inbox annotation read + consume its export
-    return (rel, f"inbox: confirmed {len(confirmed)}")
+    return (rel, f"inbox: confirmed {confirmed}/{len(order)}")
 
 
 def _process_one(pdf: Path) -> tuple[str, str]:

@@ -36,8 +36,12 @@ sidecar store (`questions.py`): a "needs you" inbox doc, and a page-1 overlay in
 onto the conflicted doc. Hard constraint: a question is **never written into the source `.md`** —
 only injected at render — so no later merge can bake it in permanently (more robust than
 write-then-strip; satisfies "don't let a merge make the question permanent"). A question clears
-**only when actually answered** — page-1 ink detected (`marklayer.has_ink`) or an inbox checkbox
-confirmed — never on an unrelated later edit, so an ignored question is never silently lost.
+**only when actually answered**, detected **deterministically by page ink** (`marklayer.has_ink`)
+— never by an LLM round-trip and never on an unrelated edit. Page-1 ink on the conflicted doc
+answers it in context; the inbox renders **one question per page** (`format: inbox`) so a page
+that got ink confirms that question (a page→id order sidecar maps them), and unanswered pages
+stay open and come back. So an ignored question is never silently lost, and a partial inbox is
+fine.
 Mirror folds a question fingerprint into change-detection so the overlay appears/clears even with
 no source change. Everything stays a revertible `supernote:` commit (ADR-001). Rejected:
 hard-stop-on-conflict (blocks the doc in an unattended loop); writing the question into the doc
