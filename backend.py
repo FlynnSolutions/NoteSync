@@ -34,25 +34,51 @@ def _redact(s: str) -> str:
     return re.sub(r"(://[^/\s:@]+:)[^@\s/]+(@)", r"\1***\2", s)
 
 
+# Final instruction for the claude_code path. Claude Code is an agent that tends to add
+# commentary / ask questions, so we have it WRITE its answer to a scratch file and read that
+# back. Two answer shapes: a whole markdown document (the edit flow) vs an exact text/JSON
+# answer (structured reads like read_marks). {outfile} is filled in per call.
+_DOC_INSTR = (
+    "IMPORTANT — you are running headless as a document transform, not in a chat. Do the edit, "
+    "then use the Write tool to write the COMPLETE edited markdown document to this exact path:\n"
+    "{outfile}\nAlways write the full document, even if the annotations change nothing. Do not "
+    "paste the document into your reply; after writing, reply only with: DONE.")
+_TEXT_INSTR = (
+    "IMPORTANT — you are running headless, not in a chat. Use the Write tool to write your "
+    "COMPLETE answer — EXACTLY the format specified above (e.g. the JSON), and NOTHING else: no "
+    "prose, no code fences, no commentary — to this exact path:\n{outfile}\nAfter writing, reply "
+    "only with: DONE.")
+
+
 def read(system: list[dict], content: list[dict], *, max_tokens: int = 32000) -> str:
-    """Run the completion through the configured backend; return the model's raw text."""
+    """Run a whole-DOCUMENT transform through the configured backend; return the edited text."""
     if config.backend() == "api":
         return _api(system, content, max_tokens)
-    return _claude_code(system, content)
+    return _claude_code(system, content, _DOC_INSTR)
+
+
+def read_text(system: list[dict], content: list[dict], *, max_tokens: int = 32000) -> str:
+    """Run a STRUCTURED read (the answer is text/JSON the caller's system prompt specifies, not a
+    document transform). api returns text directly; claude_code writes the answer to a scratch
+    file (agents are unreliable at returning long structured text in the chat reply)."""
+    if config.backend() == "api":
+        return _api(system, content, max_tokens)
+    return _claude_code(system, content, _TEXT_INSTR)
 
 
 # --- claude_code: the Max-plan path --------------------------------------
-def _claude_code(system: list[dict], content: list[dict]) -> str:
+def _claude_code(system: list[dict], content: list[dict], answer_instr: str) -> str:
     """Flatten the request into one prompt and run it through `claude -p`. Images are
     referenced by absolute path for Claude to Read.
 
-    Claude Code is an agent, not a raw completion: asked to "return the markdown" it tends
-    to add commentary or ask questions. So instead we have it WRITE the edited document to a
-    scratch file and we read that file back — its chat reply is then irrelevant. (The temp
-    file lives under the repo so Claude's Write tool stays inside its workspace.)"""
+    Claude Code is an agent, not a raw completion: asked to "return the answer" it tends to add
+    commentary or ask questions. So instead we have it WRITE its answer to a scratch file and we
+    read that file back — its chat reply is then irrelevant. `answer_instr` (a {outfile} template)
+    says what to write: a whole markdown document (_DOC_INSTR) or an exact text/JSON answer
+    (_TEXT_INSTR). The temp file lives under the repo so Claude's Write tool stays in its workspace."""
     out_dir = HERE / ".backend_out"
     out_dir.mkdir(exist_ok=True)
-    fd, tmp = tempfile.mkstemp(suffix=".md", dir=out_dir)
+    fd, tmp = tempfile.mkstemp(suffix=".txt", dir=out_dir)
     os.close(fd)
     outfile = Path(tmp)
 
@@ -63,12 +89,7 @@ def _claude_code(system: list[dict], content: list[dict]) -> str:
             parts.append(f"[Read the image at {Path(b['path']).resolve()}]")
         else:
             parts.append(b.get("text", ""))
-    parts.append(
-        "IMPORTANT — you are running headless as a document transform, not in a chat. Do "
-        "the edit, then use the Write tool to write the COMPLETE edited markdown document to "
-        f"this exact path:\n{outfile}\nAlways write the full document, even if the "
-        "annotations change nothing. Do not paste the document into your reply; after "
-        "writing, reply only with: DONE.")
+    parts.append(answer_instr.format(outfile=outfile))
     prompt = "\n\n".join(parts)
 
     try:
@@ -92,7 +113,7 @@ def _claude_code(system: list[dict], content: list[dict]) -> str:
                      f"{_redact(proc.stderr.strip() or proc.stdout.strip())}")
         result = outfile.read_text(encoding="utf-8") if outfile.exists() else ""
         if not result.strip():
-            sys.exit("backend(claude_code): Claude did not write the edited document "
+            sys.exit("backend(claude_code): Claude did not write its answer to the scratch file "
                      f"(reply was: {_redact(proc.stdout.strip()[:200])!r})")
         return result
     finally:

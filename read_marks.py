@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-read_marks.py — read a doc's handwritten annotations as STRUCTURED, per-note records,
-each anchored to the exact document line it targets. This is the targeting fix: rather
-than reading the page holistically (which merges separate notes and snaps them to the
-nearest heading), we force one record per distinct mark and make the model name its
-target by QUOTING the doc line — grounded by a computed line-map (doc_lines.py) and the
-registration-corrected composite (marklayer).
+read_marks.py — read a doc's handwritten annotations as STRUCTURED, per-note records, each
+anchored to the exact document line it targets. Fixes annotation *targeting* (separate from
+recognition): a holistic whole-page read merges distinct notes and snaps them to the nearest
+heading; here we force one record per mark and make the model name its target by QUOTING the
+doc line, grounded by a computed line-map (doc_lines.py) and the registration-corrected
+composite (marklayer).
 
-Per annotated page the model is given:
+The ENTIRE document is read in ONE backend call — every page's corrected composite + ink +
+line-map go in together, so the model has full-document context (and we pay one agent spin-up,
+not one per page). Returns a JSON object keyed by page.
+
+Per page the model gets:
   * the corrected composite (ink over the page, vertically aligned) — for *where* marks sit
   * the ink-only image — ground truth of *what* was written
-  * the page's line-map: every doc line with its y% (the same y-space the ink uses)
-  * the handwriting profile (QUIRKS.md), incl. the marking conventions
-
-…and must return JSON: one object per distinct note. See SYSTEM.
+  * that page's line-map: every doc line with its y% (same y-space as the ink)
+…plus the handwriting profile (QUIRKS.md) once, up front.
 
 Usage:
     python read_marks.py PATH/TO/DOC.pdf.mark [--pdf DOC.pdf] [--json out.json]
@@ -37,16 +39,17 @@ SYSTEM = """\
 You transcribe a person's handwritten annotations on a document into STRUCTURED records.
 Accuracy of *targeting* (which line each note is about) matters as much as the words.
 
-You are given, per page: the page with their ink drawn on it (aligned — a note sits on the
-line it refers to), the ink-only image (exactly what they wrote), and a LINE-MAP listing every
-printed line with its vertical position as `[y=NN.N%]`. The ink and the line-map share the same
+You are given the WHOLE document at once — all annotated pages together, so use full-document
+context. For each page you get: the page with their ink drawn on it (aligned — a note sits on
+the line it refers to), the ink-only image (exactly what they wrote), and a LINE-MAP listing
+every printed line with its vertical position as `[y=NN.N%]`. Ink and line-map share the same
 y-axis, so a note centered at y≈43% targets the line-map entry nearest 43%.
 
 HARD RULES:
 1. ONE record per spatially-distinct note. NEVER merge two notes because they're near each
    other. Three short notes in one area are three records on three different lines.
-2. Each note's target is the line directly under it — match by y% against the LINE-MAP and
-   QUOTE that line. Do not snap to the nearest bold heading or the next paragraph.
+2. Each note's target is the line directly under it — match by y% against THAT page's LINE-MAP
+   and QUOTE that line. Do not snap to the nearest bold heading or the next paragraph.
 3. Mark types:
    - "over-text": written on top of its target line (the default).
    - "bracket": a line beside several rows with NO arrowhead — targets exactly the rows it
@@ -57,56 +60,64 @@ HARD RULES:
    phrase without @claude ("Fix this") is still an edit but command=false.
 5. Use the handwriting profile for ambiguous letters.
 
-Output ONLY a JSON array (no prose, no code fences). Each element:
+Output ONLY a JSON object (no prose, no code fences):
 {
-  "text": "<verbatim transcription>",
-  "mark_type": "over-text" | "bracket" | "leader",
-  "target_y": <number, the note's center as a %>,
-  "target": "<the QUOTED doc line(s) it's about, or 'note: <other note text>' for a leader to another mark>",
-  "command": <true|false>,
-  "confidence": <0.0-1.0>
+  "pages": [
+    { "page": <int>, "notes": [
+        { "text": "<verbatim>", "mark_type": "over-text"|"bracket"|"leader",
+          "target_y": <number %>, "target": "<QUOTED doc line(s), or 'note: <other note>' for a leader to another mark>",
+          "command": <bool>, "confidence": <0.0-1.0> }
+    ] }
+  ]
 }
+Include every annotated page, in order, even if a page has zero notes (empty "notes").
 """
 
 
-def read_page(composite: Path, ink: Path, line_map: str, quirks: str) -> list[dict]:
-    system = [
-        {"type": "text", "text": SYSTEM},
-        {"type": "text", "text": f"# Handwriting profile\n\n{quirks}"},
-    ]
-    content = [
-        {"type": "text", "text": "Page with ink (aligned):"},
-        {"type": "image", "path": composite},
-        {"type": "text", "text": "Ink only (ground truth of the writing):"},
-        {"type": "image", "path": ink},
-        {"type": "text", "text": f"LINE-MAP for this page:\n{line_map}"},
-        {"type": "text", "text": "Return the JSON array of notes."},
-    ]
-    raw = backend.read(system, content).strip()
+def _parse(raw: str) -> dict:
+    raw = raw.strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1] if "\n" in raw else raw
         if raw.rstrip().endswith("```"):
             raw = raw.rstrip()[:-3]
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        # be forgiving: pull the outermost [...] if the model wrapped it
-        a, b = raw.find("["), raw.rfind("]")
-        if a >= 0 and b > a:
-            return json.loads(raw[a:b + 1])
-        raise
+        raw = raw.strip()
+    for cand in (raw, raw[raw.find("{"): raw.rfind("}") + 1] if "{" in raw and "}" in raw else ""):
+        if not cand:
+            continue
+        try:
+            return json.loads(cand)
+        except json.JSONDecodeError:
+            continue
+    raise ValueError("could not parse a JSON object from the model reply")
 
 
-def read_marks(mark: Path, pdf: Path) -> dict:
+def read_doc(mark: Path, pdf: Path) -> dict:
+    """Read every annotated page in ONE batched backend call; return the structured result."""
     quirks = QUIRKS.read_text(encoding="utf-8") if QUIRKS.exists() else "(no profile yet)"
-    pages_dir = HERE / "checkin_pages"
-    extracted = marklayer.extract(mark, pdf, pages_dir)   # [(pdf_page, full, ink), ...]
-    result = {"doc": pdf.name, "pages": []}
-    for pdf_page, full, ink in extracted:
-        line_map = doc_lines.lines_block(pdf, pdf_page)
-        notes = read_page(full, ink, line_map, quirks)
-        result["pages"].append({"page": pdf_page, "notes": notes})
-    return result
+    extracted = marklayer.extract(mark, pdf, HERE / "checkin_pages")   # [(page, full, ink), ...]
+
+    system = [
+        {"type": "text", "text": SYSTEM},
+        {"type": "text", "text": f"# Handwriting profile\n\n{quirks}"},
+    ]
+    content: list[dict] = [{"type": "text", "text":
+                            f"Document: {pdf.name} — {len(extracted)} annotated page(s) follow."}]
+    for page, full, ink in extracted:
+        content.append({"type": "text", "text": f"===== PAGE {page} — composite (aligned) ====="})
+        content.append({"type": "image", "path": full})
+        content.append({"type": "text", "text": f"===== PAGE {page} — ink only ====="})
+        content.append({"type": "image", "path": ink})
+        content.append({"type": "text", "text":
+                        f"===== PAGE {page} — LINE-MAP =====\n{doc_lines.lines_block(pdf, page)}"})
+    content.append({"type": "text", "text": "Return the JSON object for the whole document."})
+
+    raw = backend.read_text(system, content)
+    try:
+        result = _parse(raw)
+        result.setdefault("doc", pdf.name)
+        return result
+    except ValueError:
+        return {"doc": pdf.name, "error": "parse", "raw": raw[:4000], "pages": []}
 
 
 def main() -> None:
@@ -118,11 +129,13 @@ def main() -> None:
     pdf = args.pdf or config.pdf_for(args.mark)
     if not pdf.exists():
         sys.exit(f"PDF not found: {pdf}")
-    result = read_marks(args.mark, pdf)
+    result = read_doc(args.mark, pdf)
     text = json.dumps(result, indent=2)
     if args.json:
         args.json.write_text(text, encoding="utf-8")
-        print(f"wrote {args.json}")
+        n = sum(len(p.get("notes", [])) for p in result.get("pages", []))
+        print(f"wrote {args.json} — {len(result.get('pages', []))} pages, {n} notes"
+              + ("  [PARSE ERROR — see 'raw']" if result.get("error") else ""))
     else:
         print(text)
 
