@@ -26,6 +26,15 @@ the real trigger — the loop just notices the new export within a poll interval
 poll is indistinguishable from "event-driven" for this; there's no value in wiring up Google
 push notifications.)
 
+### Hybrid: laptop-first, cloud as standby
+
+If you run the local watcher (`sync.sh watch`) on your laptop, this box should only step in
+when the laptop's *off*. It does, automatically: the watcher stamps a hidden `.laptop-alive`
+file in your Drive folder every ~60s, and each tick this container checks it — **standing down
+while the laptop is active**, working only once the heartbeat goes stale (laptop off, >5 min by
+default). No double-processing, no races; fail-safe if the laptop crashes. Tune with
+`HEARTBEAT_STALE_SECS` (set `0` for a cloud-only setup with no laptop in the loop).
+
 ### Two ways to trigger it (`RUN_MODE`)
 
 - **`loop`** (default): the container self-schedules — mount Drive once, run a pass every

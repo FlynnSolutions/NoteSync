@@ -28,10 +28,12 @@ import time
 from pathlib import Path
 
 import config
+import heartbeat
 import mirror
 import vcs
 
 HERE = Path(__file__).resolve().parent
+HEARTBEAT_EVERY_S = 60   # how often to stamp "laptop alive" for the cloud standby (hybrid)
 
 
 def _snapshot() -> dict[Path, float]:
@@ -84,9 +86,15 @@ def main() -> None:
     print(f"Watching {base} (roots: {roots or 'all'}) for .md changes. Ctrl-C to stop.")
     prev = _snapshot()
     pending: dict[Path, float] = {}    # changed file -> its latest mtime (for debounce)
+    heartbeat.write()                  # tell the cloud standby "the laptop is on" right away
+    last_hb = time.time()
 
     while True:
         time.sleep(args.interval)
+        # Keep the cloud standby deferring to this laptop while the watcher runs (hybrid).
+        if time.time() - last_hb >= HEARTBEAT_EVERY_S:
+            heartbeat.write()
+            last_hb = time.time()
         cur = _snapshot()
         for p, m in cur.items():
             if prev.get(p) != m:       # new or modified since last scan

@@ -44,6 +44,13 @@ git -C /work config user.email "${GIT_USER_EMAIL:-supernote-sync@localhost}"
 #    which is what trips the subscription's short-window/concurrency rate limits).
 cd /app
 run_once() {
+  # Hybrid: stand down while the laptop's watcher is active (it stamps .laptop-alive in Drive).
+  # The cloud only works when that heartbeat is stale (laptop off). HEARTBEAT_STALE_SECS=0
+  # disables the gate (cloud always runs — for a no-laptop / cloud-only setup).
+  if [ "${HEARTBEAT_STALE_SECS:-300}" != "0" ] && python3 /app/heartbeat.py alive "${HEARTBEAT_STALE_SECS:-300}"; then
+    echo "laptop is active — standing down this tick (it handles sync when it's on)"
+    return 0
+  fi
   git -C /work pull --ff-only || true
   ./sync.sh run || echo "run failed — continuing" >&2
   git -C /work push || true
