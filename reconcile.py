@@ -96,10 +96,12 @@ Resolve EVERY conflict region into the single edit the user most likely intends.
 sides' independent changes where they don't truly collide; never silently drop content. The
 device side is the user's newest handwriting and usually wins on the exact thing it targets.
 
-Output the COMPLETE resolved document with every conflict marker removed — nothing else, no
-code fences. Begin your output with EXACTLY ONE line, then the document on the next line:
+Produce the COMPLETE resolved document with every conflict marker removed, no code fences. The
+document's VERY FIRST LINE must be exactly one of these verdict comments, then the rest of the
+document follows on the next line:
   <!-- RESOLVE: confident -->                          when the merge is unambiguous
-  <!-- RESOLVE: uncertain | <one sentence: what you did + your recommendation> -->   otherwise\
+  <!-- RESOLVE: uncertain | <one sentence: what you did + your recommendation> -->   otherwise
+The verdict line is PART OF the document you output (or write to a file) — never omit it.\
 """
 
 
@@ -107,7 +109,9 @@ def _resolve(rel: str, conflicted: str) -> tuple[str, bool, str] | None:
     """Ask Claude to resolve diff3 conflict markers (eager). Returns (resolved_doc, confident,
     note); None if the model call failed, so the caller falls back to writing markers."""
     system = [{"type": "text", "text": _RESOLVE_SYSTEM}]
-    content = [{"type": "text", "text": f"Resolve the conflicts in `{rel}`:\n\n{conflicted}"}]
+    content = [{"type": "text", "text":
+        f"Resolve the conflicts in `{rel}`. Remember: the document's FIRST LINE must be the "
+        f"`<!-- RESOLVE: ... -->` verdict comment.\n\n{conflicted}"}]
     try:
         out = backend.read(system, content).strip()
     except (SystemExit, Exception):

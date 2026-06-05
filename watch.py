@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -52,6 +53,15 @@ def _rel(p: Path) -> str:
         return str(p.relative_to(config.source_base()))
     except ValueError:
         return str(p)
+
+
+def _heartbeat_loop() -> None:
+    """Stamp .laptop-alive on its OWN timer, independent of the main loop — so a multi-minute
+    ink read (which blocks the main thread) can't let the heartbeat go stale and wake the cloud
+    standby to double-process. Daemon thread; dies with the process."""
+    while True:
+        time.sleep(HEARTBEAT_EVERY_S)
+        heartbeat.write()
 
 
 def _drain(dry_run: bool) -> None:
@@ -104,17 +114,14 @@ def main() -> None:
     print(f"Watching {base} (roots: {roots or 'all'}) for .md changes. Ctrl-C to stop.")
     prev = _snapshot()
     pending: dict[Path, float] = {}    # changed file -> its latest mtime (for debounce)
-    heartbeat.write()                  # tell the cloud standby "the laptop is on" right away
-    last_hb = last_drain = time.time()
+    if not args.dry_run:
+        heartbeat.write()              # tell the cloud standby "the laptop is on" right away,
+        threading.Thread(target=_heartbeat_loop, daemon=True).start()  # then keep it fresh
+    last_drain = time.time()
 
     while True:
         time.sleep(args.interval)
         now = time.time()
-        # Keep the cloud standby deferring to this laptop while the watcher runs (hybrid).
-        if now - last_hb >= HEARTBEAT_EVERY_S:
-            heartbeat.write()
-            last_hb = now
-
         # desktop -> device: render + push docs whose source changed (debounced).
         cur = _snapshot()
         for p, m in cur.items():
@@ -133,8 +140,6 @@ def main() -> None:
         # device -> desktop: read back any new annotations (throttled — not latency-critical).
         if now - last_drain >= DRAIN_CHECK_EVERY_S:
             last_drain = now
-            heartbeat.write()          # stay "alive" across a multi-minute ink read
-            last_hb = now
             _drain(args.dry_run)
 
 

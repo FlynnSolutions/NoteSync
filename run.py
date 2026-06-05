@@ -52,12 +52,20 @@ def _pending_all() -> list[Path]:
 
 
 def _rel_for(pdf: Path) -> str | None:
-    """Source rel for a Library PDF via the manifest; None if absent or ambiguous."""
+    """Source rel for a pending Library PDF via the manifest, matched by full RELATIVE PATH —
+    not basename. Many docs share a name (README, CLAUDE, CHANGELOG); basename-matching marked
+    those ambiguous and silently dropped them from the drain."""
     if not MANIFEST.exists():
         return None
-    hits = [e for e in json.loads(MANIFEST.read_text())
-            if Path(e["pdf"]).stem == pdf.stem]
-    return hits[0]["source_rel"] if len(hits) == 1 else None
+    library = config.library()
+    try:
+        pdf_rel = str(pdf.relative_to(library)) if library else pdf.name
+    except ValueError:
+        pdf_rel = pdf.name
+    for e in json.loads(MANIFEST.read_text()):
+        if e["pdf"] == pdf_rel:
+            return e["source_rel"]
+    return None
 
 
 def _is_inbox(rel: str) -> bool:
@@ -123,7 +131,13 @@ def drain() -> list[tuple[str, str]]:
     """Process every doc with a pending device annotation (extract -> read -> merge+apply).
     Returns [(label, status)], status in applied|conflict|skipped. Empty if nothing pending.
     Reused by the local watcher (watch.py) so device->desktop runs on the laptop too."""
-    return [_process_one(pdf) for pdf in _pending_all()]
+    before = len(questions.open_questions())
+    results = [_process_one(pdf) for pdf in _pending_all()]
+    if len(questions.open_questions()) < before:
+        # A question cleared this pass (e.g. an inbox confirmation, which unlike reconcile does
+        # NOT re-mirror the conflicted doc) — re-mirror so its injected page-1 overlay drops.
+        _script("mirror.py")
+    return results
 
 
 def summary(results: list[tuple[str, str]]) -> str:
