@@ -2,6 +2,51 @@
 
 Why the key choices were made. Newest first.
 
+### ADR-014 — Conflict resolution: eager auto-merge, then ask via injected surfaces  *(extends ADR-008)*
+A true same-region collision no longer stops at conflict markers. The system (1) **eagerly**
+asks Claude to resolve the diff3 and **applies** the result — the doc keeps moving — and (2) if
+Claude isn't confident, logs an open **question** for review (it never silently ships an unsure
+merge unflagged). Questions surface on two device-facing surfaces, both **generated** from a
+sidecar store (`questions.py`): a "needs you" inbox doc, and a page-1 overlay injected at render
+onto the conflicted doc. Hard constraint: a question is **never written into the source `.md`** —
+only injected at render — so no later merge can bake it in permanently (more robust than
+write-then-strip; satisfies "don't let a merge make the question permanent"). A question clears
+**only when actually answered** — page-1 ink detected (`marklayer.has_ink`) or an inbox checkbox
+confirmed — never on an unrelated later edit, so an ignored question is never silently lost.
+Mirror folds a question fingerprint into change-detection so the overlay appears/clears even with
+no source change. Everything stays a revertible `supernote:` commit (ADR-001). Rejected:
+hard-stop-on-conflict (blocks the doc in an unattended loop); writing the question into the doc
+(entangles future merges). Author's tuning: auto-merge is **eager** (apply optimistically, flag
+when unsure), not conservative.
+
+### ADR-013 — Local-first, with the cloud as a deferring standby
+The round-trip can run on the laptop (free, no server) or on an always-on host (for when the
+laptop is off). Decision: **local-first** — `sync.sh watch` on the laptop is the primary engine
+(both directions + the renderer + the heartbeat), and the container is an **opt-in standby** that
+acts only when the laptop is off. Coordination is a heartbeat file: the laptop stamps a hidden
+`.laptop-alive` timestamp in the Drive folder (the one medium both machines see) on a dedicated
+thread, and the standby stands down while it's fresh, working only once it goes stale — fail-safe
+(crashed laptop → stale → standby takes over), no double-processing. The device export is the
+trigger either way (a short poll is indistinguishable from event-driven here). Rejected: cloud as
+the primary (pays for a server you don't need); a naive heartbeat stamped on the work thread (a
+multi-minute read let it go stale → the cloud double-processed — fixed by the dedicated thread).
+
+### ADR-012 — Pluggable AI backend; default the Claude subscription via `claude -p`  *(revises ADR-009)*
+ADR-009 planned a hard dependency on the **metered** Claude API for the one model step (reading
+ink). Revised: the model call goes through a small pluggable backend (`backend.py`), chosen by
+config — `claude_code` (default): shell out to `claude -p` (Claude Code headless), which runs on
+the user's Claude **subscription** (no per-token cost, no API key); `api`: the metered Anthropic
+SDK (prompt-cached, needs a key), kept for high volume. Why: a personal daily-driver shouldn't
+meter every handwriting read, and most users already pay for a subscription. Gotchas that shaped
+it: Claude Code is an agent, not a raw completion — asked to "return the doc" it adds commentary,
+so the claude_code path has it **write the doc to a scratch file** and reads that back (the same
+trick carries the conflict-resolution verdict); `claude -p` blocks on stdin (pass `/dev/null`);
+and Claude Code **bills the metered API over the subscription whenever any `ANTHROPIC_*`
+credential is visible**, so the subprocess env strips the whole family and `.env` is only loaded
+on the `api` backend. Note (2026-06): headless `claude -p` is explicitly allowed on subscriptions
+and, from 2026-06-15, draws a separate monthly Agent SDK credit — "included up to a cap," not
+literally free.
+
 ### ADR-011 — Read ink from the `.mark` layer, not red-pixel isolation  *(supersedes ADR-004)*
 A Supernote `.pdf.mark` sidecar is itself a native Supernote document whose strokes live
 in a layer separate from the page, so `supernote-tool` extracts them directly — colour-

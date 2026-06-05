@@ -40,6 +40,15 @@ import config
 HERE = Path(__file__).resolve().parent
 
 
+def has_ink(png: Path) -> bool:
+    """True if this ink-only page PNG exists and carries marks (any dark pixel). marklayer
+    only writes a PNG for pages that have ink, so existence is usually enough; the pixel
+    check guards against a near-blank emit. Used to tell whether a page was actually answered."""
+    if not png.exists():
+        return False
+    return Image.open(png).convert("L").getextrema()[0] < 250
+
+
 def _align_ink(ink: Image.Image) -> Image.Image:
     """Fix the `.mark` ink's vertical registration against the PDF page before compositing.
 

@@ -33,6 +33,7 @@ from pathlib import Path
 import backend
 import config
 import derive
+import marklayer
 import marks
 import questions
 import vcs
@@ -103,6 +104,13 @@ document follows on the next line:
   <!-- RESOLVE: uncertain | <one sentence: what you did + your recommendation> -->   otherwise
 The verdict line is PART OF the document you output (or write to a file) — never omit it.\
 """
+
+
+def _page1_answered(rel: str) -> bool:
+    """Did the user actually write on page 1 — the injected question overlay? marklayer writes
+    checkin_pages/ink/<stem>-p1.png only when page 1 has ink, so this tells a real answer apart
+    from edits made elsewhere in the doc (which must NOT silently clear an unanswered question)."""
+    return marklayer.has_ink(HERE / "checkin_pages" / "ink" / f"{Path(rel).stem}-p1.png")
 
 
 def _resolve(rel: str, conflicted: str) -> tuple[str, bool, str] | None:
@@ -193,10 +201,14 @@ def main() -> None:
     snapshot(src, rel)
     src.write_text(merged)
     print(f"  Applied -> {src}")
-    for q in prior_qs:                  # the user's page-1 answer addressed these -> clear them
-        questions.resolve(q["id"])
-    if prior_qs:
+    # Clear the doc's prior questions ONLY if the user actually wrote on page 1 (the overlay).
+    # Editing elsewhere in the doc must not silently drop a question they never answered.
+    if prior_qs and _page1_answered(rel):
+        for q in prior_qs:
+            questions.resolve(q["id"])
         print(f"  cleared {len(prior_qs)} answered question(s)")
+    elif prior_qs:
+        print(f"  {len(prior_qs)} question(s) still open (no answer on page 1 this time)")
     if conflicts and not confident:
         # Eager apply done, but it's still uncertain -> flag it (cleared one above may re-open
         # as a new question with fresh context; that's intended — keep asking until it's right).
