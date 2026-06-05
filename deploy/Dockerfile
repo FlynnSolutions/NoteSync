@@ -9,7 +9,7 @@ FROM python:3.13-slim
 # jq (used by Claude Code), curl/ca-certs (fetch the Claude installer), libcairo2 (runtime
 # for pycairo, pulled in via supernotelib -> svglib -> rlpycairo).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        poppler-utils rclone git fuse3 ripgrep jq curl ca-certificates libcairo2 \
+        poppler-utils rclone git openssh-client fuse3 ripgrep jq curl ca-certificates libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI — the claude_code backend shells out to `claude -p`. The official

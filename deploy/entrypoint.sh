@@ -27,6 +27,13 @@ RUN_MODE="${RUN_MODE:-loop}"       # loop = self-scheduled; oneshot = one pass t
 
 mkdir -p /drive /work /state
 
+# Git auth via a mounted SSH deploy-key (no token in the repo URL/.git/config/logs). If the
+# key is present, use it for all git over SSH; accept-new trusts the host on first connect.
+if [ -f /run/secrets/deploy_key ]; then
+  chmod 600 /run/secrets/deploy_key 2>/dev/null || true
+  export GIT_SSH_COMMAND="ssh -i /run/secrets/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+fi
+
 # 1. Mount Google Drive (rclone.conf must be present; FUSE required). Wait for it to come up.
 echo "Mounting ${RCLONE_REMOTE}: -> /drive ..."
 rclone mount "${RCLONE_REMOTE}:" /drive --daemon --vfs-cache-mode writes \

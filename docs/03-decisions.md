@@ -2,6 +2,17 @@
 
 Why the key choices were made. Newest first.
 
+### ADR-015 — Cloud git auth: SSH deploy-key, not a token in the URL
+The container needs write access to the notes repo. Decision: an **SSH deploy-key** (a key
+scoped to that one repo, mounted read-only at `/run/secrets/deploy_key`, used via
+`GIT_SSH_COMMAND`). Rejected the simpler **HTTPS-token-in-URL** (`https://user:token@host`): an
+audit found that token leaks into git/`.git/config` and any error output (which on a cloud host
+flows to CloudWatch/journald). With SSH the secret never appears in a URL, config, or log;
+`StrictHostKeyChecking=accept-new` trusts the host on first connect (fine for a personal box).
+Defense-in-depth: the backend still redacts `scheme://user:TOKEN@host` from any diagnostic it
+prints. (Note: git auth is for the *notes repo* — unrelated to the device, which only talks to
+Google Drive.)
+
 ### ADR-014 — Conflict resolution: eager auto-merge, then ask via injected surfaces  *(extends ADR-008)*
 A true same-region collision no longer stops at conflict markers. The system (1) **eagerly**
 asks Claude to resolve the diff3 and **applies** the result — the doc keeps moving — and (2) if

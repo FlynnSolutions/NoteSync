@@ -11,6 +11,8 @@ __pycache__
 config.toml
 deploy/loop.env
 deploy/rclone.conf
+deploy/deploy_key
+deploy/deploy_key.pub
 handwriting/QUIRKS.md
 handwriting/key.md
 handwriting/reference/

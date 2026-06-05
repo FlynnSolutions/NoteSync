@@ -89,8 +89,14 @@ of them to the host.
    This writes `~/.config/rclone/rclone.conf`. You'll copy that file to the host.
 
 3. **A notes git repo** (`DOCS_REPO`) — your source `.md` docs live here; applied ink edits
-   are committed as revertible `supernote:` commits and pushed back. Create a **deploy key**
-   or a write-scoped token so the host can pull/push it.
+   are committed as revertible `supernote:` commits and pushed back. Auth is an **SSH
+   deploy-key** (no token in any URL/log):
+   ```bash
+   ssh-keygen -t ed25519 -f deploy_key -N ""   # creates deploy_key (+ deploy_key.pub)
+   ```
+   Add `deploy_key.pub` as a **deploy key with write access** on the repo (GitHub → repo →
+   Settings → Deploy keys), set `DOCS_REPO=git@github.com:you/notes.git`, and you'll copy the
+   private `deploy_key` to the host (next section).
 
 ## Stand up the host
 
@@ -122,8 +128,9 @@ nano loop.env            # paste CLAUDE_CODE_OAUTH_TOKEN, set DOCS_REPO
 container can't mount Drive and step 4 fails at the mount:
 ```bash
 scp ~/.config/rclone/rclone.conf ubuntu@<instance-ip>:~/supernote-sync/deploy/rclone.conf
+scp deploy_key                    ubuntu@<instance-ip>:~/supernote-sync/deploy/deploy_key
 ```
-Both `loop.env` and `rclone.conf` are gitignored — keep them only on the host.
+`loop.env`, `rclone.conf`, and `deploy_key` are all gitignored — keep them only on the host.
 
 ### 4. Run it
 ```bash
@@ -156,7 +163,8 @@ You should see the Drive mount come up, the docs repo clone, and a `== supernote
   walk away," not instant.
 
 ## Security
-- `loop.env` holds your Claude token; `rclone.conf` holds Google Drive OAuth. Anyone with the
+- `loop.env` holds your Claude token; `rclone.conf` holds Google Drive OAuth; `deploy_key` is
+  your repo's SSH key. Anyone with the
   host can act as you on both — lock SSH down (key-only, restricted source IP) and don't put
   these on a shared box.
 - The container runs with `SYS_ADMIN` + `/dev/fuse` (required for the rclone mount); keep it

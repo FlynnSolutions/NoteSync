@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,11 @@ import config
 
 HERE = Path(__file__).resolve().parent
 TIMEOUT_S = 1200  # a slow agentic read runs minutes; cap it so a hang can't wedge the loop
+
+
+def _redact(s: str) -> str:
+    """Mask a token embedded in a URL (scheme://user:TOKEN@host) before printing diagnostics."""
+    return re.sub(r"(://[^/\s:@]+:)[^@\s/]+(@)", r"\1***\2", s)
 
 
 def read(system: list[dict], content: list[dict], *, max_tokens: int = 32000) -> str:
@@ -83,11 +89,11 @@ def _claude_code(system: list[dict], content: list[dict]) -> str:
             sys.exit(f"backend(claude_code): `claude -p` timed out after {TIMEOUT_S}s")
         if proc.returncode != 0:
             sys.exit(f"backend(claude_code): `claude -p` failed (exit {proc.returncode}):\n"
-                     f"{proc.stderr.strip() or proc.stdout.strip()}")
+                     f"{_redact(proc.stderr.strip() or proc.stdout.strip())}")
         result = outfile.read_text(encoding="utf-8") if outfile.exists() else ""
         if not result.strip():
             sys.exit("backend(claude_code): Claude did not write the edited document "
-                     f"(reply was: {proc.stdout.strip()[:200]!r})")
+                     f"(reply was: {_redact(proc.stdout.strip()[:200])!r})")
         return result
     finally:
         outfile.unlink(missing_ok=True)

@@ -15,6 +15,7 @@ services:
     security_opt: ["apparmor:unconfined"]
     volumes:
       - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
+      - ./deploy_key:/run/secrets/deploy_key:ro   # SSH deploy-key for the notes repo (gitignored)
       - sync-state:/state                  # read-once ledger + digest state (survive restarts)
       - sync-work:/work                    # the docs repo (revertible edits live here)
     restart: unless-stopped
