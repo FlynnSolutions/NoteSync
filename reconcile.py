@@ -155,6 +155,7 @@ def main() -> None:
         if not p.exists():
             sys.exit(f"missing {label}: {p}\n  (run `sync.sh mirror` for base, and write the device edit first)")
 
+    prior_qs = questions.for_doc(rel)   # open questions whose page-1 answer is in this read
     merged, conflicts = three_way(src, base, dev)
     print(f"3-way merge of {rel}: {'CLEAN' if conflicts == 0 else f'{conflicts} CONFLICT region(s)'}")
 
@@ -186,8 +187,13 @@ def main() -> None:
     snapshot(src, rel)
     src.write_text(merged)
     print(f"  Applied -> {src}")
+    for q in prior_qs:                  # the user's page-1 answer addressed these -> clear them
+        questions.resolve(q["id"])
+    if prior_qs:
+        print(f"  cleared {len(prior_qs)} answered question(s)")
     if conflicts and not confident:
-        # Eager apply done, but flag it for review on the question surfaces (brick 3/4).
+        # Eager apply done, but it's still uncertain -> flag it (cleared one above may re-open
+        # as a new question with fresh context; that's intended — keep asking until it's right).
         qid = questions.record(rel, note or "Please review this auto-merge.", context=conflict_ctx)
         print(f"  uncertain merge — logged question {qid} for your review: {note}")
     if vcs.commit_paths([src], f"supernote: apply ink edits to {rel}"):

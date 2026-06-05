@@ -30,6 +30,7 @@ from pathlib import Path
 
 import backend
 import config
+import questions
 
 HERE = Path(__file__).resolve().parent
 BASE_DIR = HERE / "base"
@@ -143,6 +144,19 @@ def main() -> None:
         {"type": "text", "text": f"# Current markdown source ({rel})\n\n{base_md}",
          "cache_control": {"type": "ephemeral"}},
     ]
+
+    # If this doc carries a conflict question, its rendered PDF has an injected page-1 overlay
+    # (NOT document content). The user's ink there is their ANSWER to a recent uncertain merge.
+    open_qs = questions.for_doc(rel)
+    if open_qs:
+        qlist = "\n".join(f"- [{q['id']}] {q['question']}" for q in open_qs)
+        system.insert(1, {"type": "text", "text":
+            "CONFLICT-QUESTION OVERLAY: the FIRST page of this doc is an injected question "
+            "overlay (it begins '# Needs you' and is NOT part of the document). It asks the "
+            "user to clarify a recent uncertain auto-merge. Treat their handwriting on page 1 "
+            "as the ANSWER: apply that clarification to the document, and do NOT transcribe the "
+            "page-1 question text (or its checkbox/prompt lines) into the output. Pages 2+ are "
+            "the real document — annotate them normally.\nOpen question(s):\n" + qlist})
 
     edited = backend.read(system, content).strip()
     # Strip accidental code fences if the model added them.

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -28,11 +29,15 @@ from pathlib import Path
 
 import config
 import marks
+import questions
+import reconcile
 
 HERE = Path(__file__).resolve().parent
 PY = sys.executable
 MANIFEST = HERE / "manifest.json"
 CHECKIN = HERE / "checkin_pages"
+DEVICE_DIR = HERE / "device"
+_INBOX_ID_RE = re.compile(r"`\[([0-9a-f]{12})\]`")
 
 
 def _script(name: str, *a: str) -> int:
@@ -55,6 +60,44 @@ def _rel_for(pdf: Path) -> str | None:
     return hits[0]["source_rel"] if len(hits) == 1 else None
 
 
+def _is_inbox(rel: str) -> bool:
+    try:
+        return rel == str(config.inbox().relative_to(config.source_base()))
+    except ValueError:
+        return False
+
+
+def _inbox_confirmations(text: str) -> list[str]:
+    """Question ids whose '- [x] looks right' box the user checked on the inbox doc."""
+    cur, confirmed = None, []
+    for line in text.splitlines():
+        m = _INBOX_ID_RE.search(line)
+        if m:
+            cur = m.group(1)
+        elif cur and line.strip().lower().startswith("- [x]"):
+            confirmed.append(cur)
+            cur = None
+    return confirmed
+
+
+def _process_inbox(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
+    """The inbox is a question dashboard, not a source doc — so we don't merge it. We read it
+    to see which '- [x] looks right' boxes the user checked and resolve those questions (the
+    eager merge already applied). Free-text corrections in the inbox aren't applied here —
+    write those on the conflicted doc's own page-1 instead. (Unverified without a device.)"""
+    shutil.rmtree(CHECKIN, ignore_errors=True)
+    if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
+        return (rel, "skipped")
+    if _script("read_ink.py", "--rel", rel) != 0:
+        return (rel, "skipped")
+    read_out = DEVICE_DIR / rel
+    confirmed = _inbox_confirmations(read_out.read_text(encoding="utf-8")) if read_out.exists() else []
+    for qid in confirmed:
+        questions.resolve(qid)
+    reconcile._consume_marks(rel)   # mark the inbox annotation read + consume its export
+    return (rel, f"inbox: confirmed {len(confirmed)}")
+
+
 def _process_one(pdf: Path) -> tuple[str, str]:
     """Extract → read (on the subscription) → merge+apply one pending doc.
     Returns (label, status) where status is applied | conflict | skipped."""
@@ -62,6 +105,8 @@ def _process_one(pdf: Path) -> tuple[str, str]:
     if rel is None:
         return (pdf.name, "skipped")          # no/ambiguous manifest entry
     mark = config.mark_for(pdf)
+    if _is_inbox(rel):                         # the "needs you" dashboard — resolve, don't merge
+        return _process_inbox(pdf, rel, mark)
 
     shutil.rmtree(CHECKIN, ignore_errors=True)   # isolate this doc's ink
     if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
