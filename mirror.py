@@ -26,6 +26,7 @@ import config
 import derive
 import inbox
 import marks
+import questions
 import vcs
 from render import render_bytes
 
@@ -59,10 +60,19 @@ def _sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
 
 
-def _manifest_entry(pdf_rel: Path, src: Path, rel: Path, sha: str, rendered_at: str) -> dict:
-    """One manifest row: maps a rendered PDF back to its source (path + content hash)."""
+def _manifest_entry(pdf_rel: Path, src: Path, rel: Path, sha: str, rendered_at: str,
+                    q_fp: str = "") -> dict:
+    """One manifest row: maps a rendered PDF back to its source (path + content hash). q_fp is
+    a fingerprint of the doc's open conflict questions, so a question added/cleared re-renders
+    the PDF (the injected page-1) even when the source itself didn't change."""
     return {"pdf": str(pdf_rel), "source": str(src), "source_rel": str(rel),
-            "sha256": sha, "rendered_at": rendered_at}
+            "sha256": sha, "rendered_at": rendered_at, "q_fp": q_fp}
+
+
+def _qfp(rel: Path) -> str:
+    """Fingerprint of a doc's open questions (empty if none) — folded into change detection."""
+    ids = sorted(q["id"] for q in questions.for_doc(str(rel)))
+    return hashlib.sha256("\0".join(ids).encode()).hexdigest()[:8] if ids else ""
 
 
 def _rederive_in_place(src: Path) -> bool:
@@ -133,9 +143,11 @@ def main() -> None:
             rederived_docs.append(src)
         pdf_rel = rel.with_suffix(".pdf")
         cur_hash = _sha256(src)
+        cur_qfp = _qfp(rel)
         if args.dry_run:
-            tag = "unchanged" if prev.get(str(rel), {}).get("sha256") == cur_hash else "render"
-            print(f"  [{tag}] {rel}")
+            pe = prev.get(str(rel), {})
+            unchanged = pe.get("sha256") == cur_hash and pe.get("q_fp", "") == cur_qfp
+            print(f"  [{'unchanged' if unchanged else 'render'}] {rel}")
             continue
 
         dst = library / pdf_rel
@@ -148,17 +160,19 @@ def main() -> None:
         if mark.exists() and not marks.is_processed(mark):
             print(f"  PROTECTED (pending marks, not re-rendered): {rel}")
             protected += 1
-            manifest.append(entry or _manifest_entry(pdf_rel, src, rel, cur_hash, "(protected)"))
+            manifest.append(entry or _manifest_entry(pdf_rel, src, rel, cur_hash, "(protected)", cur_qfp))
             continue
 
-        # Unchanged source + PDF still present → skip (this is what stops the full re-sync).
-        if entry and entry["sha256"] == cur_hash and dst.exists() and not args.force:
+        # Unchanged source + same question state + PDF present → skip (stops the full re-sync).
+        if (entry and entry["sha256"] == cur_hash and entry.get("q_fp", "") == cur_qfp
+                and dst.exists() and not args.force):
             manifest.append(entry)
             skipped += 1
             continue
 
         try:
-            new_bytes = render_bytes(src.read_text(encoding="utf-8"), str(rel))
+            new_bytes = render_bytes(src.read_text(encoding="utf-8"), str(rel),
+                                     questions=questions.for_doc(str(rel)))
             # Write the PDF ONLY if its bytes actually differ. Rendering is
             # deterministic, so an unchanged doc (even under --force) produces
             # identical bytes -> we don't touch the file -> Google Drive sees no
@@ -166,7 +180,7 @@ def main() -> None:
             # full re-syncs: a renderer change re-syncs only the docs it truly alters.
             if dst.exists() and dst.read_bytes() == new_bytes:
                 manifest.append(
-                    entry or _manifest_entry(pdf_rel, src, rel, cur_hash, "(unchanged-output)"))
+                    _manifest_entry(pdf_rel, src, rel, cur_hash, "(unchanged-output)", cur_qfp))
                 unchanged_out += 1
                 continue
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -175,7 +189,7 @@ def main() -> None:
             base_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, base_path)
             manifest.append(
-                _manifest_entry(pdf_rel, src, rel, cur_hash, time.strftime("%Y-%m-%dT%H:%M:%S")))
+                _manifest_entry(pdf_rel, src, rel, cur_hash, time.strftime("%Y-%m-%dT%H:%M:%S"), cur_qfp))
             rendered += 1
         except Exception as e:
             print(f"  FAIL {rel}: {e}", file=sys.stderr)

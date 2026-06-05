@@ -284,12 +284,30 @@ def _section_height(section: list[str], usable: float, doc_format: str = "notes"
     return scratch.get_y() - start
 
 
-def _build(md_text: str, source_label: str = "", doc_format: str = "notes") -> DocPDF:
+def _question_page_lines(qs: list[dict]) -> list[str]:
+    """Markdown for the injected page-1 overlay (an open conflict question + answer area).
+    Generated from the question store; the source doc is never touched, so no merge can bake
+    it in. Deterministic (no timestamps), so it doesn't break mirror's byte-stable output."""
+    lines = ["# Needs you — answer below", "",
+             "> This doc's last merge wasn't certain. Write your answer under each question,",
+             "> then export — it applies on the next sync and this page disappears.", ""]
+    for q in qs:
+        lines += [f"**Q `[{q['id']}]`:** {q['question']}", "",
+                  "- [ ] looks right as merged", "",
+                  "_Your answer / correction:_", "", "", ""]
+    return lines
+
+
+def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
+           questions: list[dict] | None = None) -> DocPDF:
     pdf = _new_pdf(doc_format)
     pdf.source_label = source_label
-    pdf.add_page()
     usable = PAGE_W_MM - 2 * MARGIN_MM
     bottom = PAGE_H_MM - BOTTOM_MARGIN_MM
+    if questions:
+        pdf.add_page()                       # page 1 = question overlay (source untouched)
+        _render_lines(pdf, _question_page_lines(questions), usable)
+    pdf.add_page()                           # doc content starts on its own page
     if doc_format == "checklist":
         _render_legend(pdf, usable)
 
@@ -306,11 +324,13 @@ def _build(md_text: str, source_label: str = "", doc_format: str = "notes") -> D
     return pdf
 
 
-def render_bytes(md_text: str, source_label: str = "") -> bytes:
-    """Render to PDF bytes (deterministic for a given source + renderer). A leading
-    `---` frontmatter block is parsed for options (e.g. `format:`) and stripped."""
+def render_bytes(md_text: str, source_label: str = "",
+                 questions: list[dict] | None = None) -> bytes:
+    """Render to PDF bytes (deterministic for a given source + renderer + questions). A leading
+    `---` frontmatter block is parsed for options (e.g. `format:`) and stripped. `questions`
+    (open conflict questions for this doc) injects a page-1 overlay; None for normal docs."""
     meta, body = _parse_frontmatter(md_text)
-    return bytes(_build(body, source_label, meta.get("format", "notes")).output())
+    return bytes(_build(body, source_label, meta.get("format", "notes"), questions).output())
 
 
 def render_markdown(md_text: str, out_path: str, source_label: str = "") -> None:
