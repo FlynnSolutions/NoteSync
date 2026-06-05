@@ -2,6 +2,20 @@
 
 Why the key choices were made. Newest first.
 
+### ADR-016 — Cloud Drive access via `rclone copy`, not a FUSE mount  *(unprivileged container)*
+The container reaches Google Drive by **syncing** the Supernote folder to a local working copy
+with `rclone copy` (the Drive **API**) — pull device writes before a pass, push rendered PDFs
+after — instead of `rclone mount`. Why: *mounting a filesystem* is what forced the **`SYS_ADMIN`**
+capability (+ `/dev/fuse`, + `apparmor:unconfined`), which is near-root and the easiest container
+→ host escape path; an audit flagged it, and the author may run the box (a Pi) for other things
+too. Dropping the mount lets the container run **unprivileged** (`cap_drop: ALL` +
+`no-new-privileges`). Bonus: FUSE-in-a-container also requires the *host* to allow `--device
+/dev/fuse`, which managed platforms like Fargate refuse — `rclone copy` runs anywhere. Trade:
+copies are **additive (no deletes)** so a concurrent device write is never clobbered by a
+sync-with-delete; the cost is that consumed exports linger on Drive, which is harmless because
+the read-once ledger (`marks.py`) already ignores them. (Running as a non-root *user* is a
+further step, deferred — it needs the rclone.conf path + volume ownership reworked.)
+
 ### ADR-015 — Cloud git auth: SSH deploy-key, not a token in the URL
 The container needs write access to the notes repo. Decision: an **SSH deploy-key** (a key
 scoped to that one repo, mounted read-only at `/run/secrets/deploy_key`, used via

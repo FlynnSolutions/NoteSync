@@ -13,7 +13,7 @@ a few minutes the host reads the ink on your **Claude subscription** (no metered
 ## How it works (the shape)
 
 ```
-Supernote ──(Supernote Cloud)──▶ Google Drive ◀──(rclone FUSE mount)── always-on host
+Supernote ──(Supernote Cloud)──▶ Google Drive ◀──(rclone copy, Drive API)── always-on host
    ▲                                                                         │
    └──────────────── rendered PDFs sync back ◀──── `sync.sh run` every 5 min ┘
                                                    (digests → mirror → drain pending,
@@ -37,15 +37,16 @@ default). No double-processing, no races; fail-safe if the laptop crashes. Tune 
 
 ### Two ways to trigger it (`RUN_MODE`)
 
-- **`loop`** (default): the container self-schedules — mount Drive once, run a pass every
-  `LOOP_INTERVAL`. Simplest; good if this box does nothing else.
-- **`oneshot`**: mount, run **one** pass, flush, exit. Use this when an **external** trigger
-  drives it — the "scheduled → cron, on-demand → heartbeat" split. A host crontab handles the
-  clockwork:
+- **`loop`** (default): the container self-schedules — a pass every `LOOP_INTERVAL`.
+  Simplest; good if this box does nothing else.
+- **`oneshot`**: run **one** pass, then exit. Use this when an **external** trigger drives it
+  — the "scheduled → cron, on-demand → heartbeat" split. A host crontab handles the clockwork
+  (note: **no `--cap-add`/`--device` needed** — there's no FUSE mount):
   ```cron
-  */10 * * * * docker run --rm --cap-add SYS_ADMIN --device /dev/fuse \
+  */10 * * * * docker run --rm --cap-drop ALL --security-opt no-new-privileges \
       -v /home/ubuntu/supernote-sync/deploy/rclone.conf:/root/.config/rclone/rclone.conf:ro \
-      -v sync-work:/work -v sync-state:/state \
+      -v /home/ubuntu/supernote-sync/deploy/deploy_key:/run/secrets/deploy_key:ro \
+      -v sync-work:/work -v sync-state:/state -v sync-drive:/drive \
       --env-file /home/ubuntu/supernote-sync/deploy/loop.env -e RUN_MODE=oneshot supernote-sync
   ```
   and your phone **heartbeat** fires the *same* one-shot on demand. Either way the pass is
@@ -125,7 +126,7 @@ nano loop.env            # paste CLAUDE_CODE_OAUTH_TOKEN, set DOCS_REPO
 ```
 
 **On your laptop** (a separate terminal) — copy your Drive credentials up; without this the
-container can't mount Drive and step 4 fails at the mount:
+container can't reach Drive and step 4 fails at the first sync:
 ```bash
 scp ~/.config/rclone/rclone.conf ubuntu@<instance-ip>:~/supernote-sync/deploy/rclone.conf
 scp deploy_key                    ubuntu@<instance-ip>:~/supernote-sync/deploy/deploy_key
@@ -135,9 +136,9 @@ scp deploy_key                    ubuntu@<instance-ip>:~/supernote-sync/deploy/d
 ### 4. Run it
 ```bash
 docker compose up --build -d
-docker compose logs -f          # watch the first tick: mount → clone → run
+docker compose logs -f          # watch the first tick: sync → clone → run
 ```
-You should see the Drive mount come up, the docs repo clone, and a `== supernote-sync run
+You should see the first Drive sync, the docs repo clone, and a `== supernote-sync run
 (backend: claude_code) ==` pass. `restart: unless-stopped` brings it back after reboots.
 
 ## Verify the round trip
@@ -164,11 +165,11 @@ You should see the Drive mount come up, the docs repo clone, and a `== supernote
 
 ## Security
 - `loop.env` holds your Claude token; `rclone.conf` holds Google Drive OAuth; `deploy_key` is
-  your repo's SSH key. Anyone with the
-  host can act as you on both — lock SSH down (key-only, restricted source IP) and don't put
-  these on a shared box.
-- The container runs with `SYS_ADMIN` + `/dev/fuse` (required for the rclone mount); keep it
-  to this single-purpose host.
+  your repo's SSH key. Anyone with the host can act as you on all three — lock SSH down
+  (key-only, restricted source IP) and keep the secrets off a shared box.
+- The container runs **unprivileged** (`cap_drop: ALL` + `no-new-privileges`, no FUSE/SYS_ADMIN)
+  — safe to run alongside other things on the box. Running it as a non-root *user* is a further
+  hardening step (needs the rclone.conf path + volume ownership adjusted); not done yet.
 
 ## Test locally first (recommended before paying for a host)
 The same image runs on your laptop — exercise the whole thing before launching anything:

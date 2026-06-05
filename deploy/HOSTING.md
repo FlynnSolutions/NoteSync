@@ -15,18 +15,18 @@ read back without your machine on.
 We assumed AWS Lambda. After studying the space (notably `allenporter/supernote`, a mature
 self-hosted Supernote server), **Lambda is the wrong tool here**, for concrete reasons:
 
-- **The Google Drive dependency fights serverless.** The whole tool reaches the device
-  through the Drive folder. A Lambda has no Drive mount; you'd bolt on `rclone` (a FUSE
-  mount, awkward in Lambda) or the Drive API, fighting the 15-minute cap and cold /tmp.
+- **The work is long and stateful, not a quick function.** A single handwriting read runs
+  minutes (against Lambda's 15-minute cap), and the loop carries state (the read-once ledger,
+  base snapshots, a local Drive working copy) — a persistent service fits, a stateless
+  function fights it.
 - **This domain deploys as a persistent service.** The reference self-hosted Supernote
-  projects run as always-on servers/containers (on a NAS, VPS, or a small box), because
-  the work is event-ish and stateful, not a quick stateless function.
-- **Our config layer already makes the *container* path trivial.** Set `SUPERNOTE_ROOT`
-  to an rclone-mounted Drive path and the existing pipeline runs unchanged — no code
-  refactor. (That env override was built for exactly this.)
+  projects run as always-on servers/containers (on a NAS, VPS, or a small box).
+- **Our config layer already makes the *container* path trivial.** Point `SUPERNOTE_ROOT` at a
+  local working copy that `rclone copy` keeps in sync with Drive (over the API — no FUSE), and
+  the existing pipeline runs unchanged, unprivileged. (That env override was built for this.)
 
-So: **a small persistent container** (a $5 VPS, a Fargate task, a Pi, or a NAS) that mounts
-Drive via rclone and runs the loop on an interval. Cheaper to reason about, no timeout
+So: **a small persistent container** (a $5 VPS, a Fargate task, a Pi, or a NAS) that syncs
+Drive via `rclone copy` and runs the loop on an interval. Cheaper to reason about, no timeout
 cliff, and it reuses the tested pipeline as-is.
 
 A note on the *bigger* alternative, for later: the reference projects implement the
@@ -38,11 +38,13 @@ flagged as the "someday, if Drive becomes the bottleneck" direction.
 ## How the container loop works
 
 `entrypoint.sh` (this dir):
-1. **Mounts** your Drive at `/drive` via rclone (from a mounted `rclone.conf`).
+1. **Syncs** your Supernote Drive folder to a local `/drive` working copy via `rclone copy`
+   (the Drive **API** — no FUSE mount, so the container needs no privileges). Additive both
+   ways, so a concurrent device write is never lost.
 2. Clones/pulls your **docs git repo** into `/work` (so applied edits are revertible
    commits, per the safety model — and can be pushed back).
-3. Loops on an interval: `./sync.sh run` = due digests → `mirror` (render docs → device) →
-   drain **every** doc with a pending annotation (read ink → 3-way merge → apply) → push.
+3. Each pass: `./sync.sh run` = due digests → `mirror` (render docs → device) → drain **every**
+   doc with a pending annotation (read ink → 3-way merge → apply) → push PDFs back to Drive.
 
 Auth is your **Claude subscription**, not the metered API: the container needs
 `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and deliberately **unsets**
@@ -58,8 +60,8 @@ These are why this can't be a turn-key autonomous deploy:
 
 1. **Google Drive auth (one-time, interactive):** `rclone config` to create a `gdrive`
    remote (OAuth in a browser). Save the resulting `rclone.conf` as a secret.
-2. **A host:** a VPS / Fargate / NAS / Pi that can run a container with FUSE
-   (`--cap-add SYS_ADMIN --device /dev/fuse`).
+2. **A host:** any VPS / Fargate / NAS / Pi that can run a container — **no special
+   privileges** (no FUSE/`SYS_ADMIN`), since Drive access is `rclone copy` over the API.
 3. **Docs-repo write access:** a deploy key (or token) so the container can pull/push the
    notes git repo.
 4. **Claude subscription token** (`claude setup-token`) as a secret — not an API key.

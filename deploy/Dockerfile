@@ -5,11 +5,11 @@
 #   docker build -f deploy/Dockerfile -t supernote-sync .
 FROM python:3.13-slim
 
-# Runtime deps: poppler (pdftoppm), rclone (Google Drive mount), git, FUSE, ripgrep +
-# jq (used by Claude Code), curl/ca-certs (fetch the Claude installer), libcairo2 (runtime
-# for pycairo, pulled in via supernotelib -> svglib -> rlpycairo).
+# Runtime deps: poppler (pdftoppm), rclone (Drive API — copy, NOT a FUSE mount, so no
+# SYS_ADMIN needed), git + openssh-client (SSH deploy-key), ripgrep + jq (Claude Code),
+# curl/ca-certs (Claude installer), libcairo2 (pycairo via supernotelib -> svglib -> rlpycairo).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        poppler-utils rclone git openssh-client fuse3 ripgrep jq curl ca-certificates libcairo2 \
+        poppler-utils rclone git openssh-client ripgrep jq curl ca-certificates libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI — the claude_code backend shells out to `claude -p`. The official
@@ -31,11 +31,9 @@ RUN apt-get update \
 COPY *.py sync.sh ./
 COPY assets/ assets/
 
-# NOTE: rclone's `drive` remote roots at "My Drive" itself, so the Supernote folder sits
-# directly under the mount (/drive/Supernote) — there is NO "My Drive" path level like in
-# Google Drive for Desktop. Override SUPERNOTE_ROOT in loop.env if your folder differs.
+# SUPERNOTE_ROOT is a LOCAL working copy of the Supernote Drive folder; the entrypoint sets
+# it from DRIVE_PATH and keeps it in sync with `rclone copy`. The other paths are fixed here.
 ENV SUPERNOTE_SOURCE_BASE=/work \
-    SUPERNOTE_ROOT="/drive/Supernote" \
     SUPERNOTE_STATE_DIR=/state \
     LOOP_INTERVAL=300
 
