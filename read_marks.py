@@ -27,6 +27,8 @@ import json
 import sys
 from pathlib import Path
 
+from PIL import Image
+
 import backend
 import config
 import doc_lines
@@ -35,15 +37,32 @@ import marklayer
 HERE = Path(__file__).resolve().parent
 QUIRKS = HERE / "handwriting" / "QUIRKS.md"
 
+
+def _aligned_ink(src: Path, dst: Path) -> Path:
+    """Write a registration-corrected ink-only PNG (black-on-white). We send ONLY ink (no
+    printed page) to keep the agent's per-file Read cheap, so the ink's vertical position must
+    match the line-map's page-space y% — apply the same affine as the composite, white-filled."""
+    scale, offset = config.mark_align()
+    im = Image.open(src).convert("RGB")
+    if scale != 1.0 or offset != 0.0:
+        w, h = im.size
+        coeffs = (1, 0, 0, 0, 1.0 / scale, -offset * h / scale)
+        im = im.transform((w, h), Image.AFFINE, coeffs, resample=Image.BILINEAR,
+                          fillcolor=(255, 255, 255))
+    im.save(dst)
+    return dst
+
 SYSTEM = """\
 You transcribe a person's handwritten annotations on a document into STRUCTURED records.
 Accuracy of *targeting* (which line each note is about) matters as much as the words.
 
 You are given the WHOLE document at once — all annotated pages together, so use full-document
-context. For each page you get: the page with their ink drawn on it (aligned — a note sits on
-the line it refers to), the ink-only image (exactly what they wrote), and a LINE-MAP listing
-every printed line with its vertical position as `[y=NN.N%]`. Ink and line-map share the same
-y-axis, so a note centered at y≈43% targets the line-map entry nearest 43%.
+context. For each page you get TWO things: the person's INK ONLY (registration-corrected,
+black-on-white — exactly what they wrote, positioned where it sits on the page) and that page's
+LINE-MAP — every printed line with its vertical position as `[y=NN.N%]`. You do NOT get an image
+of the printed page; the LINE-MAP *is* the page's text/structure. Ink and line-map share the
+same y-axis, so estimate each note's vertical center as a % from the ink image and match it to
+the LINE-MAP entry nearest that % — that's its target line.
 
 HARD RULES:
 1. ONE record per spatially-distinct note. NEVER merge two notes because they're near each
@@ -102,11 +121,10 @@ def read_doc(mark: Path, pdf: Path) -> dict:
     ]
     content: list[dict] = [{"type": "text", "text":
                             f"Document: {pdf.name} — {len(extracted)} annotated page(s) follow."}]
-    for page, full, ink in extracted:
-        content.append({"type": "text", "text": f"===== PAGE {page} — composite (aligned) ====="})
-        content.append({"type": "image", "path": full})
-        content.append({"type": "text", "text": f"===== PAGE {page} — ink only ====="})
-        content.append({"type": "image", "path": ink})
+    for page, _full, ink in extracted:
+        aligned = _aligned_ink(ink, ink.with_name(f"aligned-{ink.name}"))
+        content.append({"type": "text", "text": f"===== PAGE {page} — ink only (corrected) ====="})
+        content.append({"type": "image", "path": aligned})
         content.append({"type": "text", "text":
                         f"===== PAGE {page} — LINE-MAP =====\n{doc_lines.lines_block(pdf, page)}"})
     content.append({"type": "text", "text": "Return the JSON object for the whole document."})
