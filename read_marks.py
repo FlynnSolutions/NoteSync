@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as cf
 import json
 import sys
 from pathlib import Path
@@ -56,8 +57,7 @@ SYSTEM = """\
 You transcribe a person's handwritten annotations on a document into STRUCTURED records.
 Accuracy of *targeting* (which line each note is about) matters as much as the words.
 
-You are given the WHOLE document at once — all annotated pages together, so use full-document
-context. For each page you get TWO things: the person's INK ONLY (registration-corrected,
+You are given one or more pages of a document. For each page you get TWO things: the person's INK ONLY (registration-corrected,
 black-on-white — exactly what they wrote, positioned where it sits on the page) and that page's
 LINE-MAP — every printed line with its vertical position as `[y=NN.N%]`. You do NOT get an image
 of the printed page; the LINE-MAP *is* the page's text/structure. Ink and line-map share the
@@ -110,32 +110,46 @@ def _parse(raw: str) -> dict:
     raise ValueError("could not parse a JSON object from the model reply")
 
 
-def read_doc(mark: Path, pdf: Path) -> dict:
-    """Read every annotated page in ONE batched backend call; return the structured result."""
-    quirks = QUIRKS.read_text(encoding="utf-8") if QUIRKS.exists() else "(no profile yet)"
-    extracted = marklayer.extract(mark, pdf, HERE / "checkin_pages")   # [(page, full, ink), ...]
-
+def _read_chunk(pdf: Path, chunk: list[tuple[int, Path]], quirks: str) -> list[dict]:
+    """Read one chunk of pages in a single backend call → list of page result dicts."""
     system = [
         {"type": "text", "text": SYSTEM},
         {"type": "text", "text": f"# Handwriting profile\n\n{quirks}"},
     ]
+    nums = ", ".join(str(p) for p, _ in chunk)
     content: list[dict] = [{"type": "text", "text":
-                            f"Document: {pdf.name} — {len(extracted)} annotated page(s) follow."}]
-    for page, _full, ink in extracted:
+                            f"Document {pdf.name} — page(s) {nums} of it follow (other pages omitted)."}]
+    for page, ink in chunk:
         aligned = _aligned_ink(ink, ink.with_name(f"aligned-{ink.name}"))
         content.append({"type": "text", "text": f"===== PAGE {page} — ink only (corrected) ====="})
         content.append({"type": "image", "path": aligned})
         content.append({"type": "text", "text":
                         f"===== PAGE {page} — LINE-MAP =====\n{doc_lines.lines_block(pdf, page)}"})
-    content.append({"type": "text", "text": "Return the JSON object for the whole document."})
-
+    content.append({"type": "text", "text": "Return the JSON object for these page(s)."})
     raw = backend.read_text(system, content)
     try:
-        result = _parse(raw)
-        result.setdefault("doc", pdf.name)
-        return result
+        return _parse(raw).get("pages", [])
     except ValueError:
-        return {"doc": pdf.name, "error": "parse", "raw": raw[:4000], "pages": []}
+        return [{"page": p, "error": "parse", "raw": raw[:1500], "notes": []} for p, _ in chunk]
+
+
+def read_doc(mark: Path, pdf: Path, *, chunk_size: int = 3, workers: int = 4) -> dict:
+    """Read every annotated page, in parallel chunks of `chunk_size` (up to `workers` at once).
+
+    Each chunk is its own `claude -p` call, so wall-clock ≈ the slowest chunk rather than the
+    sum of all pages. Small chunks also keep the agent attentive per page (large batches under-
+    read; see DOCS_AUDIT p7). Cross-page context is sacrificed, but mark targets are within a page."""
+    quirks = QUIRKS.read_text(encoding="utf-8") if QUIRKS.exists() else "(no profile yet)"
+    extracted = marklayer.extract(mark, pdf, HERE / "checkin_pages")   # [(page, full, ink), ...]
+    pairs = [(p, ink) for p, _full, ink in extracted]
+    chunks = [pairs[i:i + chunk_size] for i in range(0, len(pairs), chunk_size)]
+
+    pages: list[dict] = []
+    with cf.ThreadPoolExecutor(max_workers=workers) as ex:
+        for res in ex.map(lambda c: _read_chunk(pdf, c, quirks), chunks):   # ex.map keeps order
+            pages.extend(res)
+    pages.sort(key=lambda p: p.get("page", 0))
+    return {"doc": pdf.name, "pages": pages}
 
 
 def main() -> None:
@@ -143,11 +157,13 @@ def main() -> None:
     ap.add_argument("mark", type=Path)
     ap.add_argument("--pdf", type=Path, default=None)
     ap.add_argument("--json", type=Path, default=None, help="write the structured result here")
+    ap.add_argument("--chunk-size", type=int, default=3, help="pages per backend call")
+    ap.add_argument("--workers", type=int, default=4, help="parallel backend calls at once")
     args = ap.parse_args()
     pdf = args.pdf or config.pdf_for(args.mark)
     if not pdf.exists():
         sys.exit(f"PDF not found: {pdf}")
-    result = read_doc(args.mark, pdf)
+    result = read_doc(args.mark, pdf, chunk_size=args.chunk_size, workers=args.workers)
     text = json.dumps(result, indent=2)
     if args.json:
         args.json.write_text(text, encoding="utf-8")
