@@ -121,6 +121,28 @@ def checklist() -> Path | None:
     return _expand(_str("checklist", "SUPERNOTE_CHECKLIST"))
 
 
+def mark_align() -> tuple[float, float]:
+    """Vertical registration correction for compositing ink over the PDF page.
+
+    The Supernote rasterizes a `.pdf.mark`'s ink in a canvas whose vertical mapping to
+    the PDF page is a slight affine — ink lands too high, ~aligned at the page bottom and
+    drifting up toward the top. When overlaying we remap `pdf_fraction = scale*ink + offset`
+    so a mark sits on the line it was written over. Defaults measured on the Nomad; override
+    per device in config.toml under `[mark_align]` (scale/offset) or via SUPERNOTE_MARK_ALIGN_*.
+    (1.0, 0.0) = no correction."""
+    cfg = _file_cfg().get("mark_align", {})
+
+    def _f(key: str, env: str, default: float) -> float:
+        v = os.environ.get(env) or cfg.get(key)
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    return (_f("scale", "SUPERNOTE_MARK_ALIGN_SCALE", 0.863),
+            _f("offset", "SUPERNOTE_MARK_ALIGN_OFFSET", 0.133))
+
+
 # --- fonts ----------------------------------------------------------------
 # The renderer needs a regular/bold/italic TTF. Defaults to the bundled DejaVu Sans;
 # point any of these at your own font to restyle the device PDFs.

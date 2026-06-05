@@ -35,7 +35,26 @@ from pathlib import Path
 
 from PIL import Image
 
+import config
+
 HERE = Path(__file__).resolve().parent
+
+
+def _align_ink(ink: Image.Image) -> Image.Image:
+    """Fix the `.mark` ink's vertical registration against the PDF page before compositing.
+
+    supernote-tool rasterizes the ink in a canvas whose vertical mapping to the PDF is a
+    slight affine (ink too high near the top, ~aligned at the bottom — its DPI metadata is
+    zeroed, so it guesses the geometry). We remap so `pdf_fraction = scale*ink + offset`:
+    for each output row y the source row is (y - offset*H)/scale. Identity at (1.0, 0.0).
+    Coefficients come from config.mark_align() (per-device, overridable). Applied ONLY to the
+    composited context image — the ink-only ground truth stays undistorted for recognition."""
+    scale, offset = config.mark_align()
+    if scale == 1.0 and offset == 0.0:
+        return ink
+    w, h = ink.size
+    coeffs = (1, 0, 0, 0, 1.0 / scale, -offset * h / scale)   # output(x,y) <- input(x, (y-offset*h)/scale)
+    return ink.transform((w, h), Image.AFFINE, coeffs, resample=Image.BILINEAR)
 
 
 def _need(binary: str) -> str:
@@ -160,6 +179,7 @@ def extract(mark: Path, pdf: Path, out_dir: Path) -> list[tuple[int, Path, Path]
             base = Image.open(base_png).convert("RGBA")
             if base.size != ink.size:
                 ink = ink.resize(base.size)
+            ink = _align_ink(ink)   # vertical registration fix: land marks on the line written over
             Image.alpha_composite(base, ink).convert("RGB").save(full_path)
             results.append((pdf_page, full_path, ink_path))
     return results
