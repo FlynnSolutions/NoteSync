@@ -6,6 +6,7 @@ checkin_pages/
 manifest.json
 processed_marks.json
 digest_state.json
+questions.json
 digests/
 base/
 device/
