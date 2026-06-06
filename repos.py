@@ -57,21 +57,23 @@ def main() -> None:
         print(docs_repos(rows))
         return
 
+    base = config.source_base()
     print("Cloud source repos (each scan_root under source_base):\n")
     for r in rows:
-        name = r["name"]
+        name = r["name"]                  # scan_root, may be nested (e.g. Projects/Dagda)
+        path = base / name                # absolute path to the repo
         if not r["ready"]:
-            fix = (f"cd {name} && gh repo create FlynnSolutions/{name.lower()} "
-                   "--private --source=. --remote=origin --push")
-            print(f"  [needs setup] {name:<16} {r['note']}")
+            fix = (f"cd {path} && gh repo create {Path(name).name} "
+                   "--private --source=. --remote=origin --push   # add 'ORG/' before the name for an org")
+            print(f"  [needs setup] {name:<22} {r['note']}")
             print(f"                  -> {fix}")
         elif r["ahead"] == "0":
-            print(f"  [ready]       {name:<16} {r['url']}  (pushed, cloud current)")
+            print(f"  [ready]       {name:<22} {r['url']}  (pushed, cloud current)")
         elif r["ahead"] == "":
-            print(f"  [check]       {name:<16} {r['url']}  (no upstream)")
-            print(f"                  -> git -C {name} push -u origin HEAD")
+            print(f"  [check]       {name:<22} {r['url']}  (no upstream)")
+            print(f"                  -> git -C {path} push -u origin HEAD")
         else:
-            print(f"  [BEHIND]      {name:<16} {r['url']}")
+            print(f"  [BEHIND]      {name:<22} {r['url']}")
             print(f"                  {r['ahead']} unpushed commit(s) — cloud is stale until you push")
 
     dr = docs_repos(rows)

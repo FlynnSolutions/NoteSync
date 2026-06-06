@@ -4,6 +4,31 @@ Captured feature ideas not yet built. Each should have enough detail to pick up 
 
 ---
 
+## Notes ⇆ documentation as one (the knowledge-architecture direction)
+
+**Captured 2026-06-06 — being researched in a separate instance; flagged here to hand over.**
+
+The guiding idea Cory is converging on: **notes and documentation should be the same thing** —
+his thoughts and Claude's instructions living *cohesively* in one place, not split into "my
+notes" vs "the project docs." Shape he's leaning toward:
+
+- **Canonical home is the per-project repo.** A project's notes/docs/instructions live *in* that
+  project's repo (where the code/work is) — that's the source of truth. This is why we kept docs
+  in their projects (multi-repo) and made `@claude` repo-aware (ADR-017).
+- **Plus an optional GROUPED / curated view** for Cory's own reading — pulling notes across repos
+  into one place to think over them together.
+- **But the grouped view is for viewing; edits + instructions made there trickle *back down* to
+  the canonical per-project repos.** So you can curate a cross-cutting view without it becoming a
+  second source of truth.
+
+Open questions for the research instance: how the grouped view is assembled (symlinks? a
+generated aggregate? a manifest of pointers?); how edits in the grouped view route back to the
+right repo+file; how this composes with the Supernote sync (which already mirrors per-repo).
+Relates to: the multi-repo cloud setup, `@claude` repo-awareness, and the README's "knowledge
+architecture for human + Claude collaboration" framing.
+
+---
+
 ## Device-origin ingestion (create docs ON the device)
 
 **The gap.** Today the device is review-only: docs originate on the desktop (the `.md` is
