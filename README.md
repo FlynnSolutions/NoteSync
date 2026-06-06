@@ -102,6 +102,22 @@ which overrides `config.toml`: `SUPERNOTE_SOURCE_BASE`, `SUPERNOTE_SCAN_ROOTS`
 Once a `.mark` has been read it's logged by content hash (`marks.py`), so the device
 re-uploading the same ink never reprocesses or freezes the doc.
 
+### Marks vs. `@claude` instructions
+
+How you annotate decides how the edit is applied:
+
+- **A plain mark** — a check, a strike, a margin note, lines written in a blank area — is
+  applied **literally, to that one document**: exactly what you wrote, with no awareness of the
+  rest of the repo. This is the safe default and keeps edits faithful.
+- **Prefix a note with `@claude`** — e.g. `@claude reconcile this with the punchlist`, or
+  `@claude update this section to match the new schema` — and Claude **carries the instruction
+  out with awareness of the whole repository the doc lives in**: it reads the relevant files in
+  that repo for context, then applies the edit. **Use `@claude` whenever the change depends on
+  information elsewhere in the project, not just this page.**
+
+(The `@claude` text is treated as an instruction, not transcribed into the doc; case doesn't
+matter. Repo-awareness uses the `claude_code` backend — the default.)
+
 ## Document formatting
 
 It syncs *any* Markdown tree — folders carry no special meaning. Two light conventions:

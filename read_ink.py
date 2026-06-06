@@ -31,6 +31,7 @@ from pathlib import Path
 import backend
 import config
 import questions
+import vcs
 
 HERE = Path(__file__).resolve().parent
 BASE_DIR = HERE / "base"
@@ -162,6 +163,22 @@ def main() -> None:
             "as the ANSWER: apply that clarification to the document, and do NOT transcribe the "
             "page-1 question text (or its checkbox/prompt lines) into the output. Pages 2+ are "
             "the real document — annotate them normally.\nOpen question(s):\n" + qlist})
+
+    # Repo awareness for `@claude` instruction marks: tell the agent where this doc's repo is so
+    # it can read relevant files to carry the instruction out in context. Only on the claude_code
+    # backend (the api backend can't read files), and only `@claude` marks use it — literal marks
+    # stay faithful to this doc alone.
+    repo = vcs.repo_root(config.source_base() / rel)
+    if config.backend() == "claude_code" and repo is not None:
+        system.insert(1, {"type": "text", "text":
+            "REPO AWARENESS: this document lives in the repository rooted at:\n"
+            f"  {repo}\n"
+            "For an `@claude ...` instruction mark ONLY, you MAY use the Read tool on other files "
+            "in that repository (by absolute path under that root) to carry the instruction out "
+            "accurately and consistently with the rest of the project. Do NOT range across the "
+            "repo for literal marks (checks, strikes, notes, new lines) — apply those from this "
+            "document alone. Never modify any other file; your only output is this document's "
+            "edited markdown."})
 
     edited = backend.read(system, content).strip()
     # Strip accidental code fences if the model added them.

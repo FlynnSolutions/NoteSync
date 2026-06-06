@@ -56,3 +56,18 @@ Where a doc lives is up to you; the renderer never inspects the path for behavio
 structure is for *your* navigation (it's mirrored to the device verbatim). See
 [`RECIPES`](../RECIPES.md) for useful structures — a punch-list, a book, reviewing a repo's
 docs — each is a suggestion, not a rule.
+
+## Annotating: plain marks vs. `@claude`
+
+When you hand-annotate a doc, the *way* you mark it decides how the edit is applied:
+
+- **A plain mark** (check, strike, margin note, lines in a blank area) → applied **literally to
+  that one document** — exactly what you wrote, no awareness of the rest of the repo. The safe
+  default.
+- **A note prefixed `@claude`** (e.g. `@claude reconcile this with the punchlist`) → carried out
+  **with awareness of the whole repository the doc lives in**: Claude reads the relevant files in
+  that repo for context, then applies the edit. Use it whenever the change depends on information
+  beyond this page.
+
+The `@claude` text is an instruction (not transcribed into the doc; case-insensitive).
+Repo-awareness runs on the `claude_code` backend (the default). See ADR-017.

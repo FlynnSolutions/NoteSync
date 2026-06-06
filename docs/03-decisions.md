@@ -2,6 +2,22 @@
 
 Why the key choices were made. Newest first.
 
+### ADR-017 — `@claude` instruction marks are repo-aware; plain marks stay single-doc
+A plain mark is applied to the one document, faithfully (ADR-010 — apply what's written, don't
+editorialize). But an `@claude …` instruction often depends on the rest of the project
+("reconcile with the punchlist", "match the new schema"). Decision: when the model carries out an
+`@claude` mark it **may read other files in that doc's repository for context** — passed the repo
+root in the prompt; the `claude_code` backend is Claude Code (an agent with a Read tool) and reads
+by absolute path, so **no cwd change or extra plumbing was needed** (verified: it reads files
+outside its working dir). Scope is deliberately narrow: **read-only context, and only for `@claude`
+marks** — literal marks stay single-doc and faithful (feeding them the whole repo would invite
+over-editing). The agent never modifies other files; its only output is the edited markdown, and
+the source change still flows through `reconcile` + a revertible commit (ADR-001). On the `api`
+backend (no agent) the read can't happen, so repo-awareness is claude_code-only. This keeps docs
+**coupled to their projects** (no decoupled notes repo) and is the foundation for "scribble a task
+on the device → run it in the project." Verified live: an `@claude` instruction read a sibling
+file in the repo and incorporated it into the edit.
+
 ### ADR-016 — Cloud Drive access via `rclone copy`, not a FUSE mount  *(unprivileged container)*
 The container reaches Google Drive by **syncing** the Supernote folder to a local working copy
 with `rclone copy` (the Drive **API**) — pull device writes before a pass, push rendered PDFs
