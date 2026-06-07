@@ -12,6 +12,9 @@ The Drive ⇄ Supernote document lifecycle. Follows the shared
 | [04-status](./04-status.md) | What's built vs. the roadmap |
 | [05-conventions](./05-conventions.md) | How docs render (frontmatter, auto-styled checkboxes) |
 | [backlog](./backlog.md) | Captured feature ideas not yet built |
+| [research/ai-pkm-landscape](./research/ai-pkm-landscape.md) | `[claude]` Landscape scan of AI-native note/PKM tooling — taxonomy, comparison, whitespace (2026-06-06) |
+| [research/agent-readable-kb-structure](./research/agent-readable-kb-structure.md) | `[claude]` How to structure a Markdown KB for human + agent retrieval — verified findings (2026-06-06) |
+| [research/doc-provenance-convention](./research/doc-provenance-convention.md) | `[claude]` Canonical-vs-derived convention + tooling + AI rules — normative rules in `DOC_STANDARD` (2026-06-06) |
 
 See also [`../RECIPES.md`](../RECIPES.md) — worked structures (punch-list, book, repo docs).
 

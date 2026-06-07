@@ -73,6 +73,40 @@ Every doc declares an owner in its frontmatter or first line:
 The `auto` + `claude` layers stay current on their own; only the small `human`
 core needs discipline.
 
+## Provenance & canonical sources — no copy without a pointer
+
+Docs constantly reference, derive from, and consolidate each other. Left unmarked,
+that drifts: you can't tell the source from a derived view, consolidation duplicates
+content, and links rot. The discipline (rationale, tooling, and worked cases in
+[`research/doc-provenance-convention.md`](./research/doc-provenance-convention.md)):
+
+- **One canonical home per fact.** Exactly one doc/section is the place a fact is
+  *edited*. A canonical doc carries no special marker — **absence of `derived_from`
+  means canonical.**
+- **Reference, don't copy.** Everywhere else links to the canonical. Only copy content
+  into a derived view when you must (a consolidated `PUNCHLIST`, an e-ink mirror), and
+  then mark it non-canonical and edit it **only at the source**.
+- **Declare provenance in frontmatter** on any derived view:
+
+  ```yaml
+  derived_from:
+    - path: ../ops/LEARNINGS.md#auth-retry-policy
+      at: 7c868f2          # canonical's git short-SHA when last synced (drift sentinel)
+  kind: consolidation       # consolidation | summary | mirror | view
+  ```
+
+- **Moving content = moving canonicality.** When a plan absorbs a task-list item, the
+  plan section becomes canonical and the origin becomes a pointer link — never two
+  editable copies.
+- **No transclusion / embeds** — they degrade to raw syntax on the e-ink mirror. Plain
+  Markdown links only (they degrade to a readable path). Frontmatter is stripped on
+  render, so provenance never shows on the device.
+
+Plain Git can't auto-*propagate* a canonical change to its derived views, so the
+system **detects** drift instead: a link/anchor checker (`lychee`) plus a small
+provenance lint that flags any derived view whose `at:` SHA has fallen behind its
+canonical. Smallest enforcement that works; no heavyweight platform.
+
 ## How it reaches the Supernote
 
 A path-preserving renderer mirrors this tree → PDFs into the device-synced Drive

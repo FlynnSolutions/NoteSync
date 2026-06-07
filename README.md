@@ -19,6 +19,16 @@ git commit.
                 (auto-commit, revertible)
 ```
 
+## The bigger picture
+
+This tool is one piece of a larger idea: a **knowledge architecture for human +
+Claude collaboration** — a structure where your thoughts, your docs, and project
+state are organized so that the right context surfaces at the right moment with
+minimal friction, both for *you* to find things and for *Claude* to recall them.
+Handwriting on the tablet is one input; the real product is **retrieval and shared
+memory.** Everything below is in service of that: plain Markdown, in git, that a
+person and an agent can both read and trust.
+
 ## Why it works the way it does
 
 - **Markdown is canonical.** The PDF on the device is a disposable view; edits are
