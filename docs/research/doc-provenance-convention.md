@@ -77,14 +77,15 @@ derived view is safe to regenerate; a `human` canonical is the one that needs ca
    evidence-backed mandate to prefer absolute over relative paths — choose on what your
    link checker can actually resolve.[^canon])
 
-2. **A ~40-line provenance lint** (`docs/tools/check-provenance.sh`). For every doc with
-   `derived_from`: (a) assert each `path#anchor` resolves; (b) compare the recorded `at:`
-   SHA to the canonical's current last-touching commit
-   (`git log -1 --format=%h -- <path>`); if the canonical has advanced, print
-   `STALE: <derived> ← <canonical> moved <old>..<new>` and exit non-zero in CI. This is
-   the deliberate answer to the hard truth below: plain Markdown **does not** auto-update
-   derived copies, so the system **detects** drift and forces a conscious refresh instead
-   of silently rotting.
+2. **The provenance lint** — [`docs/tools/check_provenance.py`](../tools/check_provenance.py)
+   (built; stdlib + git, no dependencies). For every doc with `derived_from` it (a) asserts
+   each `path` resolves and any `#anchor` exists in the canonical; (b) compares the recorded
+   `at:` SHA to the canonical's current last-touching commit (`git log -1 --format=%h -- <path>`);
+   if the canonical advanced it prints `STALE … recorded at <old>, canonical now at <new>` and
+   exits non-zero. Run it as `python docs/tools/check_provenance.py [ROOT]`; wire into
+   pre-commit or CI. This is the deliberate answer to the hard truth below: plain Markdown
+   **does not** auto-update derived copies, so the system **detects** drift and forces a
+   conscious refresh instead of silently rotting.
 
 3. **No transclusion.** Build-time includes (Obsidian embeds, MkDocs/Redocly snippets,
    DITA conref) are real single-sourcing, but they rely on non-standard directives a
