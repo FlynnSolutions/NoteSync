@@ -43,6 +43,12 @@ _FIXED_PDF_DATE = datetime(2001, 1, 1)  # fixed so identical source -> identical
 
 _IMG = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+# A within-doc anchor link `[label](#slug)`; and a non-anchor link to degrade to its label.
+_ANCHOR_LINK = re.compile(r"\[([^\]]+)\]\(#([A-Za-z0-9._-]+)\)")
+_NONANCHOR_LINK = re.compile(r"\[([^\]]+)\]\((?!#)[^)]*\)")
+# An invisible anchor target: `<!-- canonical: slug -->` (or `anchor:`), per DOC_STANDARD.
+_ANCHOR_COMMENT = re.compile(r"<!--\s*(?:canonical|anchor):\s*([A-Za-z0-9._-]+)\s*-->")
 _SEP_ROW = re.compile(r"^\s*\|?[\s:\-\|]+\|?\s*$")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 _HR = re.compile(r"^\s*([-*_])\1{2,}\s*$")
@@ -70,10 +76,97 @@ def _parse_frontmatter(md_text: str) -> tuple[dict[str, str], str]:
 
 def _inline(text: str) -> str:
     """Strip what fpdf2's inline markdown can't handle; keep **bold**/*italic*."""
+    text = _HTML_COMMENT.sub("", text)  # comments never render (they carry anchors/notes)
     text = _IMG.sub("", text)
     text = _LINK.sub(r"\1", text)      # [label](url) -> label
     text = text.replace("`", "")        # inline code -> plain
     return sanitize(text)
+
+
+def _slugify(text: str) -> str:
+    """GitHub-style heading slug: `## Auth retry policy` -> `auth-retry-policy`, so a
+    within-doc `[x](#auth-retry-policy)` link resolves to that heading."""
+    t = _LINK.sub(r"\1", text).replace("*", "").replace("`", "")
+    t = _HTML_COMMENT.sub("", t).strip().lower()
+    t = re.sub(r"[^a-z0-9\s-]", "", t)
+    return re.sub(r"\s+", "-", t).strip("-")
+
+
+def _clean_keep_links(text: str) -> str:
+    """Like `_inline` but PRESERVES `[label](#slug)` anchor links and `**bold**` so the
+    run-writer can turn anchors into tappable internal links. Non-anchor links degrade
+    to their label, as before."""
+    text = _HTML_COMMENT.sub("", text)
+    text = _IMG.sub("", text)
+    text = _NONANCHOR_LINK.sub(r"\1", text)   # external/cross-doc links -> label
+    return text.replace("`", "")
+
+
+def _emit_bold(pdf: DocPDF, seg: str, lh: float) -> None:
+    """Write a run of text, honouring `**bold**`, flowing inline via pdf.write()."""
+    if not seg:
+        return
+    bold = False
+    for part in seg.split("**"):
+        if part:
+            pdf.set_font(FONT, "B" if bold else "", BODY)
+            pdf.write(lh, sanitize(part))
+        bold = not bold
+    pdf.set_font(FONT, "", BODY)
+
+
+def _fit(pdf: DocPDF, text: str, width: float, pad: float = 4.0) -> str:
+    """Truncate `text` (with an ellipsis) to fit `width` at the current font."""
+    if pdf.get_string_width(text) <= width - pad:
+        return text
+    while text and pdf.get_string_width(text + "...") > width - pad:
+        text = text[:-1]
+    return text.rstrip() + "..."
+
+
+def _link_button(pdf: DocPDF, label: str, lid: int | None, x_left: float, width: float,
+                 h: float = 8.5, size: float = 10.5) -> None:
+    """A big, obvious, finger-tappable navigation button: a bordered, lightly-filled box
+    with a leading arrow. On grayscale e-ink the box + arrow + size carry the affordance,
+    not colour."""
+    x0, y0 = x_left, pdf.get_y()
+    pdf.set_x(x_left)
+    pdf.set_draw_color(110)
+    pdf.set_line_width(0.3)
+    pdf.set_fill_color(231)
+    pdf.set_font(FONT, "B", size)
+    txt = _fit(pdf, ">  " + sanitize(label), width)
+    pdf.cell(width, h, txt, border=1, fill=True, align="L", new_x="LMARGIN", new_y="NEXT")
+    # Make the WHOLE box tappable, not just the text: cell(link=) only covers the glyphs,
+    # so add an explicit link annotation over the full button rectangle.
+    if lid is not None:
+        pdf.link(x0, y0, width, h, lid)
+    pdf.set_fill_color(255)
+
+
+def _emit_inline(pdf: DocPDF, text: str, lh: float, x_left: float) -> None:
+    """Render a paragraph/list line that contains `[label](#slug)` anchor links, turning
+    each resolved anchor into a tappable in-document link (blue) and leaving the rest as
+    normal flowing text. Unresolved anchors degrade to plain label text."""
+    pdf.set_left_margin(x_left)
+    pdf.set_x(x_left)
+    links = pdf._anchor_links
+    pos = 0
+    for m in _ANCHOR_LINK.finditer(text):
+        _emit_bold(pdf, text[pos:m.start()], lh)
+        label, lid = m.group(1), links.get(m.group(2).lower())
+        if lid is not None:
+            pdf.set_font(FONT, "U", BODY)   # underline reads on grayscale; colour barely does
+            pdf.set_text_color(0, 90, 200)
+            pdf.write(lh, sanitize(label), link=lid)
+            pdf.set_text_color(0)
+            pdf.set_font(FONT, "", BODY)
+        else:
+            _emit_bold(pdf, label, lh)
+        pos = m.end()
+    _emit_bold(pdf, text[pos:], lh)
+    pdf.ln(lh)
+    pdf.set_left_margin(MARGIN_MM)
 
 
 class DocPDF(FPDF):
@@ -81,6 +174,10 @@ class DocPDF(FPDF):
         super().__init__(orientation="P", unit="mm", format=(PAGE_W_MM, PAGE_H_MM))
         self.source_label = source_label
         self.doc_format = doc_format
+        # slug -> fpdf internal-link id, for tappable within-doc navigation. Populated only
+        # for anchors that are actually referenced (so link-free docs stay byte-identical).
+        self._anchor_links: dict[str, int] = {}
+        self._anchor_done: set[str] = set()   # slugs whose destination has been set
 
     def footer(self):
         self.set_y(-6)
@@ -104,6 +201,19 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
     while i < n:
         raw = lines[i]
         line = raw.rstrip()
+
+        # invisible anchor target (`<!-- canonical: slug -->`) — set the link destination
+        # here and render nothing. Any other HTML comment line is also dropped.
+        if line.lstrip().startswith("<!--"):
+            ac = _ANCHOR_COMMENT.search(line)
+            if ac:
+                s = ac.group(1).lower()
+                lid = pdf._anchor_links.get(s)
+                if lid is not None and s not in pdf._anchor_done:
+                    pdf.set_link(lid, page=pdf.page_no(), y=pdf.get_y())
+                    pdf._anchor_done.add(s)
+            i += 1
+            continue
 
         # fenced code block
         if line.strip().startswith("```"):
@@ -150,6 +260,12 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
             lvl = len(m.group(1))
             sz = HEADING_SIZE.get(lvl, 9)
             pdf.ln(2 if lvl <= 2 else 1)
+            # if this heading is a referenced anchor, plant the link destination at its top
+            s = _slugify(m.group(2))
+            lid = pdf._anchor_links.get(s)
+            if lid is not None and s not in pdf._anchor_done:
+                pdf.set_link(lid, page=pdf.page_no(), y=pdf.get_y())
+                pdf._anchor_done.add(s)
             pdf.set_font(FONT, "B", sz)
             pdf.multi_cell(usable, sz * 0.46 + 1.5, _inline(m.group(2)) or " ")
             if lvl == 1:
@@ -198,8 +314,15 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
             while i < n and lines[i].strip() and not _BLOCK_START.match(lines[i]) and "|" not in lines[i]:
                 parts.append(lines[i].strip())
                 i += 1
+            raw_join = " ".join(parts)
+            # a plain bullet carrying a within-doc anchor link -> tappable internal link
+            if not is_check and _ANCHOR_LINK.search(raw_join):
+                marker = (lm.group(2) + " ") if lm.group(2) not in ("-", "*", "+") else "- "
+                _emit_inline(pdf, sanitize(marker) + _clean_keep_links(raw_join), LIST_LH, indent)
+                pdf.set_left_margin(MARGIN_MM)
+                continue
             pdf.set_font(FONT, "", BODY)
-            body_text = _inline(" ".join(parts)) or " "
+            body_text = _inline(raw_join) or " "
             if is_check:
                 # Draw a real checkbox; align the (possibly wrapping) text past it.
                 box, y = 3.0, pdf.get_y()
@@ -231,8 +354,12 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
         while i < n and lines[i].strip() and not _BLOCK_START.match(lines[i]) and "|" not in lines[i]:
             para.append(lines[i].rstrip())
             i += 1
-        pdf.set_font(FONT, "", BODY)
-        pdf.multi_cell(usable, PARA_LH, _inline(" ".join(para)) or " ", markdown=True, align="L")
+        joined = " ".join(para)
+        if _ANCHOR_LINK.search(joined):
+            _emit_inline(pdf, _clean_keep_links(joined), PARA_LH, MARGIN_MM)
+        else:
+            pdf.set_font(FONT, "", BODY)
+            pdf.multi_cell(usable, PARA_LH, _inline(joined) or " ", markdown=True, align="L")
         pdf.ln(1.3)
 
 
@@ -273,6 +400,67 @@ def _render_legend(pdf: DocPDF, usable: float) -> None:
     pdf.ln(1.5)
 
 
+def _toc_entries(md_text: str) -> list[tuple[int, str, str]]:
+    """Level-1/2 headings as (level, title, slug) — the clickable contents index."""
+    out = []
+    for ln in md_text.splitlines():
+        m = _HEADING.match(ln)
+        if m and len(m.group(1)) <= 2:
+            out.append((len(m.group(1)), _inline(m.group(2)), _slugify(m.group(2))))
+    return out
+
+
+def _anchor_targets(md_text: str) -> set[str]:
+    """Every slug something could link to: heading slugs + explicit `<!-- canonical: -->`."""
+    targets: set[str] = set()
+    for ln in md_text.splitlines():
+        m = _HEADING.match(ln)
+        if m:
+            targets.add(_slugify(m.group(2)))
+        ac = _ANCHOR_COMMENT.search(ln)
+        if ac:
+            targets.add(ac.group(1).lower())
+    return targets
+
+
+def _register_anchors(pdf: DocPDF, md_text: str, toc: list[tuple[int, str, str]]) -> None:
+    """Create internal-link ids only for anchors actually referenced (by an in-doc
+    `[x](#slug)` link or by the TOC). Link-free docs get an empty map -> identical bytes."""
+    targets = _anchor_targets(md_text)
+    referenced = {m.group(2).lower() for m in _ANCHOR_LINK.finditer(md_text)}
+    referenced |= {slug for _lvl, _t, slug in toc}
+    for slug in referenced:
+        if slug in targets and slug not in pdf._anchor_links:
+            lid = pdf.add_link()
+            # Placeholder destination so the link is insertable even though the TOC is laid
+            # out before its target heading renders; overwritten with the real page+y then.
+            pdf.set_link(lid, page=1, y=0)
+            pdf._anchor_links[slug] = lid
+
+
+def _render_toc(pdf: DocPDF, entries: list[tuple[int, str, str]], usable: float) -> None:
+    """A finger-friendly contents index: each entry is a big tappable button (verified to
+    jump on the Supernote). Level-2 headings indent and sit slightly smaller."""
+    pdf.set_font(FONT, "B", 11)
+    pdf.cell(0, 6, "Jump to", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1.2)
+    for lvl, title, slug in entries:
+        lid = pdf._anchor_links.get(slug)
+        indent = MARGIN_MM + (lvl - 1) * 5
+        width = PAGE_W_MM - indent - MARGIN_MM
+        if lvl == 1:
+            _link_button(pdf, title, lid, indent, width, h=9.0, size=10.5)
+        else:
+            _link_button(pdf, title, lid, indent, width, h=7.5, size=9.5)
+        pdf.ln(1.6)
+    pdf.ln(0.6)
+    y = pdf.get_y()
+    pdf.set_draw_color(190)
+    pdf.set_line_width(0.2)
+    pdf.line(MARGIN_MM, y, PAGE_W_MM - MARGIN_MM, y)
+    pdf.ln(2.5)
+
+
 def _section_height(section: list[str], usable: float, doc_format: str = "notes") -> float | None:
     """Render the section into a throwaway PDF to measure its height.
     Returns None if it's taller than one page (can't be kept together)."""
@@ -299,25 +487,13 @@ def _question_page_lines(qs: list[dict]) -> list[str]:
     return lines
 
 
-def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
-           questions: list[dict] | None = None) -> DocPDF:
-    pdf = _new_pdf(doc_format)
-    pdf.source_label = source_label
-    usable = PAGE_W_MM - 2 * MARGIN_MM
-    bottom = PAGE_H_MM - BOTTOM_MARGIN_MM
-    if questions:
-        pdf.add_page()                       # page 1 = question overlay (source untouched)
-        _render_lines(pdf, _question_page_lines(questions), usable)
-    pdf.add_page()                           # doc content starts on its own page
-    if doc_format == "checklist":
-        _render_legend(pdf, usable)
-
-    # Keep each heading-led section together: if it won't fit in the remaining space
-    # (but does fit on a fresh page), page-break BEFORE it. Pushes a whole section to
-    # the next page rather than splitting a heading from its content, and leaves more
-    # bottom-of-page room to annotate. Oversized sections (taller than a page) render
-    # normally. Measured by a throwaway render — robust, and handles tables uniformly.
-    for idx, section in enumerate(_split_sections(md_text.splitlines())):
+def _render_body(pdf: DocPDF, sections: list[list[str]], usable: float, bottom: float,
+                 doc_format: str) -> None:
+    """Render the heading-led sections, keeping each together: if a section won't fit in
+    the remaining space (but does fit on a fresh page), page-break BEFORE it rather than
+    splitting a heading from its content. Oversized sections render normally. Section
+    height is measured by a throwaway render — robust, and handles tables uniformly."""
+    for idx, section in enumerate(sections):
         if doc_format == "inbox":
             if idx > 0:                  # one section (question) per page: enables deterministic
                 pdf.add_page()           # per-page answer detection (no LLM) — see run._process_inbox
@@ -326,6 +502,39 @@ def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
             if h is not None and pdf.get_y() > TOP_MARGIN_MM + 0.5 and pdf.get_y() + h > bottom:
                 pdf.add_page()
         _render_lines(pdf, section, usable)
+
+
+def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
+           questions: list[dict] | None = None, toc_pref: bool | None = None) -> DocPDF:
+    pdf = _new_pdf(doc_format)
+    pdf.source_label = source_label
+    usable = PAGE_W_MM - 2 * MARGIN_MM
+    bottom = PAGE_H_MM - BOTTOM_MARGIN_MM
+    sections = _split_sections(md_text.splitlines())
+    toc = _toc_entries(md_text)
+    # A clickable contents index only earns its place on a MULTI-PAGE doc with several
+    # headings to jump between — a TOC on a one-page doc is pointless and can't be tested
+    # (its targets are already on screen). Decide by dry-rendering the body and counting
+    # pages. An explicit `toc:` in frontmatter overrides the heuristic.
+    if toc_pref is not None:
+        want_toc = toc_pref
+    elif doc_format == "notes" and len(toc) >= 3:
+        scratch = _new_pdf(doc_format)
+        scratch.add_page()
+        _render_body(scratch, sections, usable, bottom, doc_format)
+        want_toc = scratch.page_no() > 1
+    else:
+        want_toc = False
+    _register_anchors(pdf, md_text, toc if want_toc else [])
+    if questions:
+        pdf.add_page()                       # page 1 = question overlay (source untouched)
+        _render_lines(pdf, _question_page_lines(questions), usable)
+    pdf.add_page()                           # doc content starts on its own page
+    if doc_format == "checklist":
+        _render_legend(pdf, usable)
+    if want_toc and toc:
+        _render_toc(pdf, toc, usable)
+    _render_body(pdf, sections, usable, bottom, doc_format)
     return pdf
 
 
@@ -335,7 +544,9 @@ def render_bytes(md_text: str, source_label: str = "",
     `---` frontmatter block is parsed for options (e.g. `format:`) and stripped. `questions`
     (open conflict questions for this doc) injects a page-1 overlay; None for normal docs."""
     meta, body = _parse_frontmatter(md_text)
-    return bytes(_build(body, source_label, meta.get("format", "notes"), questions).output())
+    toc_raw = meta.get("toc")
+    toc_pref = None if toc_raw is None else toc_raw.strip().lower() in ("1", "true", "yes", "on")
+    return bytes(_build(body, source_label, meta.get("format", "notes"), questions, toc_pref).output())
 
 
 def render_markdown(md_text: str, out_path: str, source_label: str = "") -> None:
