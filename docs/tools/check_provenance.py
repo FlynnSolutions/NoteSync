@@ -116,40 +116,61 @@ def _md_files(root: str):
                 yield os.path.join(dirpath, fn)
 
 
-def check(root: str) -> int:
-    problems: list[str] = []
-    notes: list[str] = []
-    checked = 0
+def iter_findings(root: str):
+    """Yield one finding dict per (derived doc, pointer, issue). `status` is one of
+    BROKEN / ANCHOR / STALE / UNTRACKED / NO-SENTINEL / CLEAN. Shared by the CLI reporter
+    and the resolver (resolve_provenance.py) so there's one source of truth for drift."""
     for md in _md_files(root):
         with open(md, encoding="utf-8") as fh:
             fm = _frontmatter(fh.read())
         if not fm:
             continue
+        rel = os.path.relpath(md, root)
         for entry in _parse_derived(fm):
-            checked += 1
-            rel = os.path.relpath(md, root)
             target, _, anchor = entry["path"].partition("#")
             resolved = os.path.normpath(os.path.join(os.path.dirname(md), target))
+            f = {"md": md, "rel": rel, "path": entry["path"], "target": target,
+                 "anchor": anchor, "resolved": resolved, "recorded": entry.get("at"),
+                 "current": None}
             if not os.path.exists(resolved):
-                problems.append(f"BROKEN  {rel}\n        derived_from -> {entry['path']} (file not found)")
+                yield {**f, "status": "BROKEN"}
                 continue
             if anchor and anchor.lower() not in _anchors_in(resolved):
-                problems.append(f"ANCHOR  {rel}\n        #{anchor} not found in {target}")
-            current = _last_commit_sha(resolved)
-            recorded = entry.get("at")
-            if current is None:
-                notes.append(f"UNTRACKED  {rel} -> {target} (not in a git repo on disk; cross-repo?)")
-            elif not recorded:
-                notes.append(f"NO-SENTINEL  {rel} -> {target} (add `at: {current}` to detect drift)")
-            elif recorded != current:
-                problems.append(
-                    f"STALE   {rel}\n        derived_from {target}: recorded at {recorded}, "
-                    f"canonical now at {current} -> re-derive and bump `at:`")
+                yield {**f, "status": "ANCHOR"}
+            f["current"] = _last_commit_sha(resolved)
+            if f["current"] is None:
+                yield {**f, "status": "UNTRACKED"}
+            elif not f["recorded"]:
+                yield {**f, "status": "NO-SENTINEL"}
+            elif f["recorded"] != f["current"]:
+                yield {**f, "status": "STALE"}
+            else:
+                yield {**f, "status": "CLEAN"}
+
+
+def check(root: str) -> int:
+    problems: list[str] = []
+    notes: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for f in iter_findings(root):
+        seen.add((f["rel"], f["path"]))
+        s = f["status"]
+        if s == "BROKEN":
+            problems.append(f"BROKEN  {f['rel']}\n        derived_from -> {f['path']} (file not found)")
+        elif s == "ANCHOR":
+            problems.append(f"ANCHOR  {f['rel']}\n        #{f['anchor']} not found in {f['target']}")
+        elif s == "STALE":
+            problems.append(f"STALE   {f['rel']}\n        derived_from {f['target']}: recorded at "
+                            f"{f['recorded']}, canonical now at {f['current']} -> re-derive and bump `at:`")
+        elif s == "UNTRACKED":
+            notes.append(f"UNTRACKED  {f['rel']} -> {f['target']} (not in a git repo on disk; cross-repo?)")
+        elif s == "NO-SENTINEL":
+            notes.append(f"NO-SENTINEL  {f['rel']} -> {f['target']} (add `at: {f['current']}` to detect drift)")
     for n in notes:
         print(n)
     for p in problems:
         print(p)
-    print(f"\nchecked {checked} derived_from pointer(s): "
+    print(f"\nchecked {len(seen)} derived_from pointer(s): "
           f"{len(problems)} problem(s), {len(notes)} note(s)")
     return 1 if problems else 0
 

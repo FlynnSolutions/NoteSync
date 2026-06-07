@@ -123,6 +123,14 @@ same shape as this repo's existing ink pipeline (read a source of truth, regener
 derived artifact, commit) — the open question below is whether to reuse `reconcile.py` /
 `marks.py` rather than build new. Tracked in memory as [[doc-provenance-auto-update]].
 
+**Built so far:** both the detect half ([`check_provenance.py`](../tools/check_provenance.py))
+and the **resolver core** ([`resolve_provenance.py`](../tools/resolve_provenance.py)). The
+resolver finds each stale view, sends its body + the current canonical section to the Claude
+backend, gets an updated body back, and bumps the `at:` SHA deterministically — **dry-run by
+default** (prints a diff; `--write` applies), mirroring `process … --apply`. Its plumbing is
+verified end-to-end (detect → resolve → re-check clean); a live model run and the
+push-trigger + auto-commit on the container are what remain.
+
 ## What the research ruled out (so we don't relearn it)
 
 - **Referencing a canonical does NOT make derived copies update automatically** in plain
