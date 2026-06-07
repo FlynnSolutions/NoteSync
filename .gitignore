@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 out/*.pdf
 checkin_pages/
+checkin_review/
 manifest.json
 processed_marks.json
 digest_state.json

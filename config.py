@@ -121,6 +121,14 @@ def checklist() -> Path | None:
     return _expand(_str("checklist", "SUPERNOTE_CHECKLIST"))
 
 
+def punchlist() -> Path | None:
+    """Optional personal master list to append review actions/TODOs to (e.g. a PUNCHLIST.md).
+    It lives OUTSIDE this repo; the path is configured here (config.toml is gitignored), so neither
+    the destination nor the personal items it collects ever enter this repo's git. None = disabled
+    (actions fall back to a local, gitignored file)."""
+    return _expand(_str("punchlist", "SUPERNOTE_PUNCHLIST"))
+
+
 def mark_align() -> tuple[float, float]:
     """Vertical registration correction for compositing ink over the PDF page.
 

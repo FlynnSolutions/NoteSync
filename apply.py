@@ -28,8 +28,10 @@ import difflib
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
+import config
 import reconcile
 
 HERE = Path(__file__).resolve().parent
@@ -133,19 +135,34 @@ def main() -> None:
                  if not n.get("command")) - len(unplaced)
     print(f"wrote {out} — {placed} notes placed, {len(unplaced)} unplaced, {len(actions)} actions")
 
-    if unplaced:
-        print("\nUNPLACED (couldn't match a target — review):")
-        for n in unplaced:
-            print(f"  p{n['page']}: \"{n.get('text','').strip()[:60]}\" (target: {(n.get('target') or '')[:50]})")
+    # Action items = @claude commands + unplaced notes (e.g. "make this a punchlist addition").
+    # These aren't document edits; route them to the personal PUNCHLIST (config, gitignored) so
+    # they land in YOUR list, never in a synced/OSS doc. Append-only under a dated inbox section.
+    todo = actions + unplaced
+    pl = config.punchlist()
+    if todo and pl is not None:
+        if not pl.exists():
+            sys.exit(f"punchlist configured but not found: {pl}")
+        lines = [f"\n## 📥 From Supernote — {date.today().isoformat()} ({marks.get('doc','?')})\n"]
+        for it in todo:
+            tgt = (it.get("target") or "").strip()
+            tgt = tgt[len("note:"):].strip() if tgt.lower().startswith("note:") else tgt
+            ctx = f"  _(re: {tgt[:70]})_" if tgt else ""
+            lines.append(f"- [ ] {it.get('text','').strip()}{ctx}")
+        block = "\n".join(lines) + "\n"
+        with pl.open("a", encoding="utf-8") as f:
+            f.write(block)
+        print(f"\nappended {len(todo)} action(s) to your punchlist ({pl}):")
+        print(block)
+    elif todo and args.actions:                       # fallback: local gitignored file
+        args.actions.write_text("# Actions (route these — NOT document edits)\n\n"
+                                + "\n".join(f"- p{a['page']}: {a.get('text','').strip()}" for a in todo) + "\n")
+        print(f"\nno punchlist configured; wrote {args.actions} — {len(todo)} action(s)")
+    elif todo:
+        print("\nACTIONS (no punchlist configured):")
+        for a in todo:
+            print(f"  - p{a['page']}: {a.get('text','').strip()}")
 
-    if actions:
-        block = "# Actions (route these — NOT document edits)\n\n" + "\n".join(
-            f"- **p{a['page']}**: {a.get('text','').strip()}" for a in actions) + "\n"
-        if args.actions:
-            args.actions.write_text(block, encoding="utf-8")
-            print(f"\nwrote {args.actions} — {len(actions)} action(s)")
-        else:
-            print("\n" + block)
     print(f"\nReview, then merge:  ./sync.sh reconcile {rel} --apply")
 
 

@@ -22,6 +22,13 @@ model = "claude-opus-4-7"
 # Optional: a single doc for the legacy `sync.sh out` quick-export flow. Leave "" to skip.
 checklist = ""
 
+# Optional: a personal master to-do list. When `apply` finds annotations that are actions
+# (e.g. "@claude ..." or "make this a punchlist addition") rather than document edits, it
+# appends them to this file under a dated "From Supernote" section for you to triage. The path
+# lives here (gitignored), so your destination and your collected TODOs never enter this repo.
+# Leave "" to disable (actions go to a local, gitignored file instead).
+# punchlist = "~/notes/PUNCHLIST.md"
+
 # Fonts (optional). Renders with the bundled DejaVu Sans by default. Point any of these
 # at your own TTFs to restyle the device PDFs (regular/bold/italic):
 # font_regular = "~/Library/Fonts/MyFont-Regular.ttf"
