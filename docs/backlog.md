@@ -267,3 +267,9 @@ targeting gaps + one orchestration nicety remain:
 3. **One-command orchestration.** Wire `read_marks` → `synthesize` → `apply` into a single
    `sync.sh` verb (e.g. `process2 <doc>`) so the structured round-trip runs in one shot (today it's
    three commands). Pairs with the existing `sync.sh process` (old holistic path).
+4. **Re-mirror only the changed doc on reconcile.** `reconcile --apply`'s final step re-mirrors the
+   *entire* tree (242 docs across 6 repos, ~8 min) when only the one merged doc changed. The merge
+   itself is instant; the full re-render is the whole wall-clock cost. `mirror.py` already skips
+   unchanged docs by content hash — but reconcile still walks all of them. Add a targeted re-mirror
+   (just `<rel>`'s PDF + base + manifest entry) for the single-doc reconcile path; keep the full
+   sweep for `sync.sh mirror`. Pure speed; no behavior change.
