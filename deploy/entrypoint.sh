@@ -11,8 +11,8 @@
 # notes repo. Copies are additive so a concurrent device write is never lost. See EC2-SETUP.md.
 #
 # Required (via loop.env): CLAUDE_CODE_OAUTH_TOKEN; DOCS_REPOS (comma list of `subpath=URL`,
-# one per scan_root); SUPERNOTE_SCAN_ROOTS (the matching subpaths); GITHUB_TOKEN (a fine-grained
-# PAT with write access to those repos); plus a mounted rclone.conf.
+# one per scan_root); a GitHub PAT with Contents:write on those repos — GITHUB_TOKEN (one owner)
+# or GITHUB_TOKENS="owner:token,..." (repos spanning owners); plus a mounted rclone.conf.
 set -euo pipefail
 
 : "${CLAUDE_CODE_OAUTH_TOKEN:?set CLAUDE_CODE_OAUTH_TOKEN (run \`claude setup-token\`)}"
@@ -33,11 +33,36 @@ export SUPERNOTE_SCAN_ROOTS="${SUPERNOTE_SCAN_ROOTS:-$_subs}"
 
 mkdir -p "$SUPERNOTE_ROOT" /work /state
 
-# Git identity + auth. A fine-grained PAT via the credential helper keeps the token out of any
-# repo URL / .git/config / log, and works for any number of repos with one secret (ADR-015).
+# rclone must rewrite its config to persist the OAuth access token it refreshes (~hourly), so
+# it needs a WRITABLE config — a read-only/bind-mounted file can't be renamed (rclone saves
+# atomically), which would 401 mid-run once the token expired. Seed a writable copy from the
+# read-only mount once; thereafter the live copy (with refreshed tokens) is kept on its volume.
+mkdir -p "$HOME/.config/rclone"
+if [ ! -f "$HOME/.config/rclone/rclone.conf" ] && [ -f /seed/rclone.conf ]; then
+  cp /seed/rclone.conf "$HOME/.config/rclone/rclone.conf"
+fi
+
+# Git identity + auth. Tokens go through the credential helper, never into a repo URL /
+# .git/config / log (ADR-015). Two shapes:
+#   GITHUB_TOKEN  — one PAT for every repo (all repos under a single owner).
+#   GITHUB_TOKENS — "owner:token,owner:token" when repos span owners; fine-grained PATs are
+#                   owner-scoped, so each owner needs its own. Matched per-repo by exact path.
 git config --global user.name  "${GIT_USER_NAME:-supernote-sync}"
 git config --global user.email "${GIT_USER_EMAIL:-supernote-sync@localhost}"
-if [ -n "${GITHUB_TOKEN:-}" ]; then
+if [ -n "${GITHUB_TOKENS:-}" ]; then
+  git config --global credential.helper store
+  git config --global credential.useHttpPath true   # so a per-repo path picks the right token
+  : > "$HOME/.git-credentials"; chmod 600 "$HOME/.git-credentials"
+  declare -A _tok; IFS=',' read -ra _pairs <<< "$GITHUB_TOKENS"
+  for _p in "${_pairs[@]}"; do _tok["${_p%%:*}"]="${_p#*:}"; done
+  IFS=',' read -ra _repos <<< "$DOCS_REPOS"
+  for pair in "${_repos[@]}"; do
+    rest="${pair#*=}"; rest="${rest#https://github.com/}"   # OWNER/REPO.git
+    token="${_tok[${rest%%/*}]:-${GITHUB_TOKEN:-}}"
+    [ -n "$token" ] || { echo "no token for owner ${rest%%/*} — add it to GITHUB_TOKENS" >&2; continue; }
+    printf 'https://x-access-token:%s@github.com/%s\n' "$token" "$rest" >> "$HOME/.git-credentials"
+  done
+elif [ -n "${GITHUB_TOKEN:-}" ]; then
   git config --global credential.helper store
   printf 'https://x-access-token:%s@github.com\n' "$GITHUB_TOKEN" > "$HOME/.git-credentials"
   chmod 600 "$HOME/.git-credentials"

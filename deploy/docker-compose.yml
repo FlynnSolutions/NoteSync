@@ -15,13 +15,15 @@ services:
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
     volumes:
-      - ./rclone.conf:/root/.config/rclone/rclone.conf:ro
+      - ./rclone.conf:/seed/rclone.conf:ro # immutable seed; entrypoint copies it to a writable
+      - rclone-config:/root/.config/rclone # …location so rclone can persist refreshed OAuth tokens
       - sync-state:/state                  # read-once ledger + digest state (survive restarts)
       - sync-work:/work                    # the docs repo (revertible edits live here)
       - sync-drive:/drive                  # local working copy of the Supernote Drive folder
     restart: unless-stopped
 
 volumes:
+  rclone-config:
   sync-state:
   sync-work:
   sync-drive:
