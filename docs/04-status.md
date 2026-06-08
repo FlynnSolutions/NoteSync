@@ -48,17 +48,16 @@ review gate (a double-read that flags disagreements would auto-catch it). (2) th
 needs a *contiguous* target quote — the reader's quotes are; a hand-edited target may not be.
 Recognition itself is strong across dense pages.
 
-### Parked: DOCS_AUDIT round-trip (2026-06-08)
+### DOCS_AUDIT round-trip — MERGED (2026-06-08)
 
 `RealtimeMFG/Docs/DOCS_AUDIT.md` (the docs-accuracy audit) was fully **read → synthesized →
-applied to `device/<rel>`** (63 notes placed; ① "Yup this should be fixed" → sub-items and ②
-"Both these last two" → prod-items both verified). The 2 action-notes (billing/early-adopter
-mindset; "make this a punchlist addition") were appended to
-`RealtimeMFG/deliverables/PUNCHLIST.md` (a `📥 From Supernote` inbox section, **uncommitted** in
-that repo — for triage). **NOT merged into the audit doc** — the pending step is
-`./sync.sh reconcile RealtimeMFG/Docs/DOCS_AUDIT.md --apply` (gated for review). The marks JSON
-(`checkin_review/DOCS_AUDIT_marks_parallel.json`) + `device/<rel>` are gitignored; re-run
-`read_marks` → `apply` to regenerate if lost.
+applied → 3-way merged into the source** (63 notes placed; ① "Yup this should be fixed" →
+sub-items and ② "Both these last two" → prod-items both verified). The merge was CLEAN, applied to
+the source, committed in the docs repo (revertible), the device `.mark` marked read (kept on
+Drive), and the tree re-mirrored. The 2 action-notes (billing/early-adopter mindset; "make this a
+punchlist addition") were routed to `RealtimeMFG/deliverables/PUNCHLIST.md` (a `📥 From Supernote`
+inbox section, for triage). This was the first full structured-pipeline round-trip taken all the
+way to source — it validated the read→synthesize→apply→reconcile chain end-to-end.
 
 ## Roadmap
 
