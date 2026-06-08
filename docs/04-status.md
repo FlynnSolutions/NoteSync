@@ -1,6 +1,6 @@
 # 04 — Status  `[claude]`
 
-_Last updated: 2026-06-02_
+_Last updated: 2026-06-08_
 
 ## Built & working
 
@@ -13,6 +13,52 @@ _Last updated: 2026-06-02_
   render + post-merge; read-once ledger (`marks.py`) prevents reprocessing re-uploads.
 - **Safety net** — source docs in git + an auto-commit per applied edit (`vcs.py`).
 - **De-personalized** — all settings via `config.py` (env / `config.toml` / auto-detect).
+
+### Structured annotation pipeline (2026-06 — targeting/recognition upgrade over `read_ink`)
+
+The holistic `read_ink.py` path (read whole page → apply) mis-*targeted* annotations — it merged
+spatially-separate notes and snapped them to the nearest heading. A structured pipeline now reads
+ink accurately and anchors each note to the exact line. The OLD path still exists; this is the
+accurate replacement for the read+apply half.
+
+- **`doc_lines.py`** — a page's text lines + y-positions via `pdftotext -bbox`. The anchor.
+- **`read_marks.py`** (Pass 1) — per-note structured read → `{text, mark_type, target (quoted
+  line), command, confidence}`. Sends a **registration-corrected ink-only image** + the line-map
+  (NOT the rendered composite — that printed text is the wasteful part). Reads the doc in
+  **parallel page-chunks** (`--chunk-size/--workers`, default 3/4) → ~5 min/doc on the Max plan and
+  attentive per page (a single 24-image batch under-read a page). Output `{pages:[{page,notes}]}`.
+- **`synthesize.py`** (Pass 2) — text-only cross-page pass → threads (`duplicate`/`theme`/
+  `doc-command`/`standalone`). Cheap (no images); catches links a per-page read can't (validated:
+  a "carbon, not carton" dupe across two pages; a billing theme across five).
+- **`apply.py`** — **deterministically** string-matches each note's quoted target to the source
+  line (difflib, normalized — no model re-find, so it can't drift to a neighbour) and inserts
+  `> 🖊️ <note>`; writes `device/<rel>` for the existing gated 3-way merge. `@claude`/unplaced
+  action-notes route to a personal `PUNCHLIST.md` (`config.punchlist()`, gitignored) — never into
+  a synced/OSS doc.
+- **Registration fix** — `marklayer._align_ink` + `config.mark_align` correct a ~10% vertical
+  offset in `supernote-tool`'s `.pdf.mark` raster (its DPI metadata is zeroed) so a mark lands on
+  the line it was written over. Per-device, config-overridable.
+- **QUIRKS marking conventions** (in the gitignored `handwriting/QUIRKS.md`): leader-line (arrow →
+  one target, may be another note) vs bracket (no arrow → spanned lines) vs over-text; **one record
+  per note, never merge**.
+
+**Two targeting failure points remain** (backlog): (1) **reader run-variance** — the parallel read
+occasionally mis-targets a note the ink-only read got right; today this is caught only at the
+review gate (a double-read that flags disagreements would auto-catch it). (2) the apply matcher
+needs a *contiguous* target quote — the reader's quotes are; a hand-edited target may not be.
+Recognition itself is strong across dense pages.
+
+### Parked: DOCS_AUDIT round-trip (2026-06-08)
+
+`RealtimeMFG/Docs/DOCS_AUDIT.md` (the docs-accuracy audit) was fully **read → synthesized →
+applied to `device/<rel>`** (63 notes placed; ① "Yup this should be fixed" → sub-items and ②
+"Both these last two" → prod-items both verified). The 2 action-notes (billing/early-adopter
+mindset; "make this a punchlist addition") were appended to
+`RealtimeMFG/deliverables/PUNCHLIST.md` (a `📥 From Supernote` inbox section, **uncommitted** in
+that repo — for triage). **NOT merged into the audit doc** — the pending step is
+`./sync.sh reconcile RealtimeMFG/Docs/DOCS_AUDIT.md --apply` (gated for review). The marks JSON
+(`checkin_review/DOCS_AUDIT_marks_parallel.json`) + `device/<rel>` are gitignored; re-run
+`read_marks` → `apply` to regenerate if lost.
 
 ## Roadmap
 

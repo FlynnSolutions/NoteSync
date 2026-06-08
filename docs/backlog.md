@@ -245,3 +245,25 @@ that spot in the source. Round-trips like any other edit.
 links. Deferred — only worth the embedding-index overhead when the corpus is large and you
 want a real query surface (i.e. if this grows into a full productivity tool). The cheaper
 "ask Claude a question" path above covers the near-term need.
+
+---
+
+## Structured annotation pipeline — residuals (2026-06-08)
+
+The `read_marks` → `synthesize` → `apply` pipeline (see 04-status) works and is in use; two
+targeting gaps + one orchestration nicety remain:
+
+1. **Reader run-variance → double-read + disagreement flag.** `read_marks` (parallel) occasionally
+   mis-targets a note a prior read got right (e.g. "Yup this should be fixed" → dashboards vs. the
+   correct sub-items line). **Confidence alone won't catch it** — the bad target was ~0.75-confident.
+   The catchable signal is *disagreement between two reads*. Build: run targeting twice and flag
+   notes whose target differs → focused review. Cost ~2× read. Until then the review gate is the
+   only backstop — and it only catches a *plausible-but-wrong* target if the reviewer has ground
+   truth (surfaced 2026-06: a wrong target would have merged unnoticed otherwise).
+2. **`apply` matcher robustness.** `apply` string-matches the reader's quoted target to the source
+   line (difflib + containment). It needs a *contiguous* quote; the reader's quotes are, but a
+   hand-edited / non-contiguous target falls to "unplaced." Add a token-overlap fallback so a
+   non-contiguous-but-clearly-matching target still anchors.
+3. **One-command orchestration.** Wire `read_marks` → `synthesize` → `apply` into a single
+   `sync.sh` verb (e.g. `process2 <doc>`) so the structured round-trip runs in one shot (today it's
+   three commands). Pairs with the existing `sync.sh process` (old holistic path).
