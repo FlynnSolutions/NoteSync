@@ -86,29 +86,48 @@ push_repos_up() {
   done
 }
 
+# Self-healing backstop: the rendered Library (Document/Library, fixed by config.library()) is a
+# DERIVED artifact — every PDF is reproducible from the repos — so duplicate names there can never
+# be unique data. A transient error mid-push can make Drive twin a folder (Drive allows same-name
+# siblings), which then blocks the device's sync. Merging identical duplicates each pass clears
+# that automatically. Scoped to Document/Library ONLY — never EXPORT/Note, where your ink lives.
+dedupe_library() {
+  rclone lsf "${REMOTE}/Document/Library" >/dev/null 2>&1 || return 0   # nothing rendered yet
+  rclone dedupe --dedupe-mode newest "${REMOTE}/Document/Library" 2>&1 \
+    | grep -i 'duplicate' >&2 || true
+}
+
 cd /app
 run_once() {
+  local rc=0
   # Hybrid: pull just the heartbeat (cheap) and stand down while the laptop is active.
   rclone copy "${REMOTE}/.laptop-alive" "$SUPERNOTE_ROOT/" 2>/dev/null || true
   if [ "${HEARTBEAT_STALE_SECS:-300}" != "0" ] && python3 /app/heartbeat.py alive "${HEARTBEAT_STALE_SECS:-300}"; then
     echo "laptop is active — standing down this tick (it handles sync when it's on)"
     return 0
   fi
-  rclone copy "$REMOTE" "$SUPERNOTE_ROOT" || echo "rclone pull failed — continuing" >&2
+  rclone copy "$REMOTE" "$SUPERNOTE_ROOT" || { echo "ERROR: rclone pull failed" >&2; rc=1; }
   sync_repos_down
-  ./sync.sh run || echo "run failed — continuing" >&2
-  rclone copy "$SUPERNOTE_ROOT" "$REMOTE" || echo "rclone push failed — continuing" >&2
+  ./sync.sh run || { echo "ERROR: sync.sh run failed" >&2; rc=1; }
+  # Push, then dedupe the derived Library so a partial push never leaves the device blocked.
+  if rclone copy "$SUPERNOTE_ROOT" "$REMOTE"; then
+    dedupe_library
+  else
+    echo "ERROR: rclone push failed — Drive may be partial; deduping defensively" >&2
+    dedupe_library
+    rc=1
+  fi
   push_repos_up
+  return $rc
 }
 
 if [ "$RUN_MODE" = "oneshot" ]; then
   echo "One-shot run (backend: $(python3 config.py backend))."
-  run_once
-  exit 0
+  if run_once; then exit 0; else echo "ERROR: one-shot pass had failures (see above)" >&2; exit 1; fi
 fi
 
 echo "Sync loop every ${INTERVAL}s (backend: $(python3 config.py backend)). Ctrl-C to stop."
 while true; do
-  run_once
+  run_once || echo "ERROR: pass had failures (see above) — retrying next tick in ${INTERVAL}s" >&2
   sleep "$INTERVAL"
 done
