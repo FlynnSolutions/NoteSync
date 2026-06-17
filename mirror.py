@@ -8,8 +8,16 @@ back to its source (path + content hash) for deterministic trip-back routing.
     <source_base>/notes/todo.md
  -> <Drive>/Supernote/Document/Library/notes/todo.pdf
 
+`--prune` self-cleans the managed library: any rendered PDF (plus its base snapshot and
+consumed .mark) no longer in the freshly-written manifest is an orphan from a source
+rename/delete/move and gets removed. If any orphan still carries UNPROCESSED ink (un-applied
+handwriting on a doc whose source moved) the whole prune aborts untouched, so you reconcile
+that ink first; `--force-prune` overrides, pruning the rest while STILL never deleting a
+pending mark. Pruning only ever touches the library namespace and the tool's own base
+snapshots — never the device's own Document/EXPORT/Note content.
+
 Usage:
-    python mirror.py [--root <dir> ...] [--dry-run]
+    python mirror.py [--root <dir> ...] [--prune | --force-prune] [--dry-run]
 """
 from __future__ import annotations
 
@@ -105,13 +113,98 @@ def collect(roots: list[str]) -> list[Path]:
     return sorted(found)
 
 
+def _remove_empty_dirs(dirs: set[Path], roots: set[Path]) -> list[Path]:
+    """Remove now-empty directories, climbing toward (but never removing) the roots.
+    Re-checks emptiness at each step so a parent emptied by its last child also goes."""
+    removed: list[Path] = []
+    for start in dirs:
+        d = start
+        while d not in roots and d.is_dir() and not any(d.iterdir()):
+            parent = d.parent
+            d.rmdir()
+            removed.append(d)
+            d = parent
+    return removed
+
+
+def prune(library: Path, valid: set[str], dry_run: bool, force: bool = False) -> None:
+    """Delete rendered PDFs (+ their base snapshot and already-consumed .mark) that no
+    longer map to any current source doc — the orphans a source rename/delete/move leaves
+    behind. ONLY touches the library namespace and the tool's own base snapshots, never the
+    device's native content, and NEVER an unprocessed .mark.
+
+    Pending ink is sacred: an orphan whose ink we haven't read is un-applied handwriting on
+    a doc whose source moved. By default ANY such orphan aborts the whole prune (nothing is
+    deleted) so the user reconciles first — pruning *around* it gutted the tree before, and
+    Drive then swept the husk, ink and all. `force=True` (--force-prune) prunes the safe
+    orphans anyway, still skipping the pending ones; pending ink is never deleted either way."""
+    safe: list[tuple[str, Path, Path | None]] = []       # (rel, pdf, consumed-mark-or-None)
+    pending: list[str] = []
+    for pdf in sorted(library.rglob("*.pdf")):           # *.pdf.mark ends in .mark, not matched
+        rel = str(pdf.relative_to(library))
+        if rel in valid:
+            continue
+        mark = config.mark_for(pdf)
+        if mark.exists() and not marks.is_processed(mark):
+            pending.append(rel)
+            continue
+        # Orphan with no ink, or ink we've already consumed -> safe to remove.
+        safe.append((rel, pdf, mark if mark.exists() else None))
+
+    if pending and not force:
+        for rel in pending:
+            print(f"  PENDING INK: {rel}", file=sys.stderr)
+        print(f"prune ABORTED: {len(pending)} orphan(s) carry unread handwriting — reconcile "
+              f"them (./sync.sh process <rel> --apply), or re-run with --force-prune to prune "
+              f"the other {len(safe)} (pending ink is never deleted either way).",
+              file=sys.stderr)
+        return
+
+    pruned: list[str] = []
+    touched: set[Path] = set()
+    for rel, pdf, mark in safe:
+        victims = [pdf]
+        if mark is not None:
+            victims.append(mark)                         # consumed sidecar goes with its pdf
+        for suf in (".md", ".markdown"):                 # source could be either extension
+            base = BASE_DIR / Path(rel).with_suffix(suf)
+            if base.exists():
+                victims.append(base)
+        for v in victims:
+            print(f"  {'would prune' if dry_run else 'pruned'}: {v}")
+            touched.add(v.parent)
+            if not dry_run:
+                v.unlink()
+        pruned.append(rel)
+
+    removed_dirs = [] if dry_run else _remove_empty_dirs(touched, {library, BASE_DIR})
+    verb = "Would prune" if dry_run else "Pruned"
+    summary = f"{verb} {len(pruned)} orphan(s)"
+    if pruned:
+        summary += ": " + ", ".join(pruned)
+    if removed_dirs:
+        summary += f" [removed {len(removed_dirs)} empty dir(s)]"
+    if pending:                                          # only reached under --force-prune
+        summary += (f"; SKIPPED {len(pending)} with pending ink (reconcile first): "
+                    + ", ".join(pending))
+    print(summary)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", action="append", help="override SCAN_ROOTS (repeatable)")
     ap.add_argument("--dry-run", action="store_true", help="list what would render, don't write")
     ap.add_argument("--force", action="store_true",
                     help="re-render all docs even if unchanged (after a renderer change)")
+    ap.add_argument("--prune", action="store_true",
+                    help="delete orphaned device PDFs/snapshots no longer in the manifest "
+                         "(left by a renamed/deleted/moved source); aborts untouched if any "
+                         "orphan has unprocessed ink")
+    ap.add_argument("--force-prune", action="store_true",
+                    help="prune even when some orphans have unprocessed ink — those are still "
+                         "never deleted, just skipped (implies --prune)")
     args = ap.parse_args()
+    do_prune = args.prune or args.force_prune
 
     library = _gdrive_library()
     if library is None and not args.dry_run:
@@ -195,6 +288,11 @@ def main() -> None:
             print(f"  FAIL {rel}: {e}", file=sys.stderr)
 
     if args.dry_run:
+        if do_prune and library is not None:
+            # No manifest is rewritten in dry-run, so derive the valid set from the docs
+            # just collected — identical strings to what the manifest would hold.
+            valid = {str(src.relative_to(BASE).with_suffix(".pdf")) for src in docs}
+            prune(library, valid, dry_run=True, force=args.force_prune)
         return
     MANIFEST.write_text(json.dumps(manifest, indent=2))
     # Commit any count-rederives as one revertible restore point in the docs repo.
@@ -205,6 +303,9 @@ def main() -> None:
             print(f"  committed rederived counts: {len(rederived_docs)} doc(s)")
     print(f"Rendered {rendered}, skipped {skipped} unchanged, {unchanged_out} identical-output, "
           f"protected {protected}. Manifest: {len(manifest)} entries -> {library}")
+
+    if do_prune:
+        prune(library, {e["pdf"] for e in manifest}, dry_run=False, force=args.force_prune)
 
 
 if __name__ == "__main__":

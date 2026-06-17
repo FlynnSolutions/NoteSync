@@ -7,7 +7,7 @@
 | Cloud sync folder | The hub. Bidirectional with the tablet (its `Supernote/` folder) and mirrored to the computer (reference: Google Drive for Desktop). Path is configurable. |
 | `config.py` | Single source of truth for settings (env `SUPERNOTE_*` > `config.toml` > auto-detect). |
 | `render.py` / `export.py` | Render any Markdown → tablet-shaped PDF (headings, lists, code, tables, footer). |
-| `mirror.py` | Walk the source tree → PDFs into the device folder at matching paths; write the manifest; snapshot source bytes to `base/`; re-derive counts. |
+| `mirror.py` | Walk the source tree → PDFs into the device folder at matching paths; write the manifest; snapshot source bytes to `base/`; re-derive counts; `--prune` self-cleans orphaned device files. |
 | `marklayer.py` | Extract ink straight from the `.mark` annotation layer (`supernote-tool`) and composite it over the source page. |
 | `read_ink.py` | Claude reads the ink (vision) against the page + a handwriting profile → interpreted Markdown. |
 | `reconcile.py` | 3-way merge the device's interpreted edits into the live source. |
@@ -35,7 +35,10 @@ Two halves, deliberately separated:
   **manifest** recording, per rendered PDF: its source path, a content hash of the
   source at render time, and the render timestamp. On check-in an annotated PDF is
   matched to its source by manifest lookup (path + hash), so routing is exact even
-  if files moved. (`route.py`)
+  if files moved. (`route.py`) The same manifest drives **pruning**: `mirror --prune`
+  deletes any device PDF (+ its `base/` snapshot and consumed `.mark`) no longer in it,
+  so a renamed/moved/deleted source self-cleans instead of stranding its old tree —
+  aborting untouched if an orphan still has unread ink. (ADR-018)
 - **Application — interpretive.** Reading ink → edits is the one fuzzy step; made
   safe by the safety net below. Everything that *can* be deterministic (counts,
   routing, merging) is — only the handwriting read uses the model.

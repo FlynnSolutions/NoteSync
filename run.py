@@ -6,7 +6,8 @@ This is the unattended check-in that deploy/entrypoint.sh sketched, finished and
 
   1. generate any digests due today (digest.py)
   2. mirror the whole doc tree to the device, so file edits — yours or a fresh digest's —
-     show up on the Supernote (mirror.py)
+     show up on the Supernote, and PRUNE orphaned device files left by a renamed/moved/
+     deleted source (mirror.py --prune; a pending-ink orphan aborts the prune, never the mirror)
   3. drain EVERY doc with a pending annotation: extract the ink, read it on your Claude
      subscription (read_ink.py via backend.py), 3-way merge, and apply (reconcile.py)
 
@@ -145,8 +146,11 @@ def main() -> None:
         print("\n[1/3] digests due today")
         _script("digest.py")
 
-    print("\n[2/3] mirror docs -> device")
-    if _script("mirror.py") != 0:
+    print("\n[2/3] mirror docs -> device (+ prune orphans)")
+    # --prune self-cleans device files orphaned by a renamed/moved/deleted source. Safe in
+    # the unattended loop: an orphan with unread ink aborts only the prune (the mirror still
+    # runs), so the heartbeat never deletes around un-applied handwriting. See mirror.py:prune.
+    if _script("mirror.py", "--prune") != 0:
         print("  mirror failed (Supernote root not found?) — continuing")
 
     print("\n[3/3] pending annotations")

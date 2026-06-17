@@ -2,6 +2,34 @@
 
 Why the key choices were made. Newest first.
 
+### ADR-018 — Mirror self-prunes orphans by manifest; pending ink aborts the prune
+A source rename/move/delete used to **strand its whole device tree**: the old PDFs (and their
+`base/` snapshots) lingered forever under `Document/Library`, because the mirror only ever *adds*.
+Decision: after writing the manifest, `mirror.py --prune` treats the freshly-written manifest as
+the **authoritative set of valid PDFs** and deletes any rendered `*.pdf` under the library — plus
+its `base/` snapshot and already-consumed `.mark` — that isn't in it. This is the exact inverse of
+the trip-back routing the manifest already powers (ADR-006). Scope is hard-bounded to the **managed
+namespace** (`Document/Library` + our own `base/`); it never touches the device's own
+`Document/`, `EXPORT/`, `Note/`, or `SCREENSHOT/` content.
+
+**Pending ink is sacred.** An orphan whose `.mark` is **unprocessed** is un-applied handwriting on
+a doc whose source moved. The first cut *skipped + warned* on those and pruned the rest — but
+pruning *around* a pending-ink orphan **gutted the surrounding tree, and Google Drive then swept
+the husk, taking the un-read ink with it.** So the default now **aborts the entire prune** (deletes
+nothing) the moment any orphan carries unprocessed ink, telling you to reconcile it first;
+`--force-prune` proceeds on the safe orphans while **still never deleting a pending `.mark`** — a
+hard invariant in every mode. Deletions land on the Drive mount (recoverable from Drive trash
+~30 days) but are treated as real, not yolo.
+
+**The orchestrator owns the policy, not the flag's default.** `--prune` is **off** in bare
+`python mirror.py` (safe to run anywhere) and **on** where a human or the loop drives a full pass:
+`sync.sh mirror` and the unattended heartbeat (`run.py`, step 2) both pass it. The heartbeat runs
+the *aborting* default, so the automated path can never delete around un-applied handwriting. The
+mid-reconcile overlay re-mirror (`run.py drain()`) stays prune-free — it's a targeted page-1
+refresh, not a full pass — and the per-edit `watch.py` mirror is left prune-free for now (it fires
+often; the heartbeat covers cleanup). Verified live: a `RealtimeMFG → Realtime` scan-root rename
+migrated the device tree (new rendered, old pruned) with no stranded files.
+
 ### ADR-017 — `@claude` instruction marks are repo-aware; plain marks stay single-doc
 A plain mark is applied to the one document, faithfully (ADR-010 — apply what's written, don't
 editorialize). But an `@claude …` instruction often depends on the rest of the project

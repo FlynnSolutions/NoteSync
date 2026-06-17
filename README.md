@@ -81,7 +81,7 @@ which overrides `config.toml`: `SUPERNOTE_SOURCE_BASE`, `SUPERNOTE_SCAN_ROOTS`
 ## Usage
 
 ```bash
-./sync.sh mirror                 # render the whole notes tree -> PDFs on the device
+./sync.sh mirror                 # render the whole notes tree -> PDFs on the device (+ prune renamed/moved orphans)
 #   ... annotate a doc by hand on the tablet, then "Export with annotations" ...
 ./sync.sh in                     # extract your ink, route it, report any drift
 ./sync.sh process <rel> --apply  # Claude reads the ink -> 3-way merge -> apply -> re-render
@@ -98,7 +98,8 @@ which overrides `config.toml`: `SUPERNOTE_SOURCE_BASE`, `SUPERNOTE_SCAN_ROOTS`
 1. **`mirror`** walks `source_base` (limited to `scan_roots`), renders each Markdown doc
    to a tablet-shaped PDF at the matching path under the Supernote sync folder, snapshots
    the exact source bytes to `base/`, and writes `manifest.json` (PDF → source + hash). It
-   also recomputes any self-labelled count lines so tallies stay honest.
+   also recomputes any self-labelled count lines so tallies stay honest, and **prunes**
+   device files orphaned by a renamed/moved/deleted source (see below).
 2. **You annotate** the PDF on the device in any pen, then *Export with annotations* —
    the explicit "I'm done" signal.
 3. **`in`** pulls your strokes straight from the `.mark` layer (`marklayer.py`), composites
@@ -111,6 +112,24 @@ which overrides `config.toml`: `SUPERNOTE_SOURCE_BASE`, `SUPERNOTE_SCAN_ROOTS`
 
 Once a `.mark` has been read it's logged by content hash (`marks.py`), so the device
 re-uploading the same ink never reprocesses or freezes the doc.
+
+### Self-cleaning on rename, move, or delete
+
+The mirror only *adds* PDFs, so renaming or moving a source folder once stranded its whole
+old tree on the device. `mirror` now **prunes**: after writing the manifest it deletes any
+device PDF (plus its `base/` snapshot and already-read `.mark`) that's no longer in the
+manifest — the orphans a rename/move/delete leaves behind. It only ever touches the tool's
+own namespace (`Document/Library` + `base/`), never your tablet's `Document/`, `EXPORT/`, or
+`Note/` content.
+
+One hard rule: if an orphan still has **unread handwriting** (an unprocessed `.mark` on a doc
+whose source moved), the whole prune **aborts** and tells you to reconcile it first — so
+cleanup never deletes around ink you haven't applied yet. `mirror.py --force-prune` overrides
+to prune the rest, and *still* never deletes a pending mark.
+
+Pruning is **on** for `./sync.sh mirror` and the unattended heartbeat (`run.py`), and **off**
+for a bare `python mirror.py` (safe to run anywhere). Deletions go to the Drive mount
+(recoverable from Drive trash ~30 days). Preview anytime with `./sync.sh mirror --dry-run`.
 
 ### Marks vs. `@claude` instructions
 

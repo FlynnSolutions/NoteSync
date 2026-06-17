@@ -3,7 +3,7 @@
 # sync.sh — one-command check-out / check-in for the Supernote doc loop.
 #
 #   ./sync.sh init        interactive first-run setup (paths + preferences -> config.toml)
-#   ./sync.sh mirror      render the whole doc tree -> PDFs into the Drive Library (matching paths) + manifest
+#   ./sync.sh mirror      render the whole doc tree -> PDFs into the Drive Library (matching paths) + manifest; prunes orphaned device files
 #   ./sync.sh run         do all due work: digests -> mirror -> drain ALL pending annotations (the heartbeat entry point)
 #   ./sync.sh repos       show your cloud source repos + push state, and print the DOCS_REPOS line for loop.env
 #   ./sync.sh watch       local sync engine (run on your laptop): edits -> device, device annotations -> docs, + the hybrid heartbeat
@@ -55,7 +55,10 @@ case "$cmd" in
   mirror)
     # Render the whole doc tree -> PDFs into the device-synced Drive Library at
     # matching relative paths, and write the manifest for trip-back routing.
-    "$PY" "$HERE/mirror.py" "${@:2}"
+    # --prune makes the orchestrator self-clean orphans left by a renamed/moved/
+    # deleted source (skips any with unprocessed ink); bare `python mirror.py` stays
+    # prune-free. Pass --dry-run after to preview. See mirror.py:prune.
+    "$PY" "$HERE/mirror.py" --prune "${@:2}"
     ;;
 
   run)
