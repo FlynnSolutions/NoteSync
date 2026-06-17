@@ -129,6 +129,14 @@ def punchlist() -> Path | None:
     return _expand(_str("punchlist", "SUPERNOTE_PUNCHLIST"))
 
 
+def letterhead_builder() -> Path | None:
+    """Optional external Markdown→PDF builder for docs with `renderer: letterhead` frontmatter
+    (e.g. a branded-letterhead Node script taking `<input.md> <output.pdf>`). Lives OUTSIDE this
+    repo; configured here so the path stays out of git. None = feature off (those docs fall back
+    to the built-in renderer)."""
+    return _expand(_str("letterhead_builder", "SUPERNOTE_LETTERHEAD_BUILDER"))
+
+
 def mark_align() -> tuple[float, float]:
     """Vertical registration correction for compositing ink over the PDF page.
 

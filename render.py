@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
 from fpdf import FPDF
 
@@ -538,12 +541,39 @@ def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
     return pdf
 
 
+def _render_letterhead(body: str) -> bytes | None:
+    """Render markdown through the external branded-letterhead builder set via
+    `letterhead_builder` (a Node script taking `<input.md> <output.pdf>`). Returns PDF bytes, or
+    None when no builder is configured so the caller falls back to the built-in renderer. A
+    configured-but-failing builder raises — a broken branded render should surface, not silently
+    ship a mismatched fallback. The round-trip is renderer-agnostic (merge keys off the source
+    markdown + manifest, not the PDF), so any valid PDF here is safe for check-in."""
+    builder = config.letterhead_builder()
+    if builder is None or not builder.exists():
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = Path(tmp) / "doc.md"
+        pdf_path = Path(tmp) / "doc.pdf"
+        md_path.write_text(body, encoding="utf-8")
+        subprocess.run(
+            ["node", str(builder), str(md_path), str(pdf_path)],
+            cwd=str(builder.parent), check=True, stdout=subprocess.DEVNULL,
+        )
+        return pdf_path.read_bytes()
+
+
 def render_bytes(md_text: str, source_label: str = "",
                  questions: list[dict] | None = None) -> bytes:
     """Render to PDF bytes (deterministic for a given source + renderer + questions). A leading
     `---` frontmatter block is parsed for options (e.g. `format:`) and stripped. `questions`
-    (open conflict questions for this doc) injects a page-1 overlay; None for normal docs."""
+    (open conflict questions for this doc) injects a page-1 overlay; None for normal docs.
+    `renderer: letterhead` routes to an external branded builder, except when conflict questions
+    are pending (those need the built-in page-1 overlay)."""
     meta, body = _parse_frontmatter(md_text)
+    if meta.get("renderer") == "letterhead" and not questions:
+        out = _render_letterhead(body)
+        if out is not None:
+            return out  # else fall through to the built-in renderer
     toc_raw = meta.get("toc")
     toc_pref = None if toc_raw is None else toc_raw.strip().lower() in ("1", "true", "yes", "on")
     return bytes(_build(body, source_label, meta.get("format", "notes"), questions, toc_pref).output())
