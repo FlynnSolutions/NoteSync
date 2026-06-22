@@ -27,7 +27,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import capture
 import config
+import ideas
+import lists
 import marklayer
 import marks
 import needs_you
@@ -95,6 +98,41 @@ def _process_needs_you(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
     return (rel, f"needs-you: confirmed {confirmed}/{len(order)}")
 
 
+def _is_capture(rel: str) -> bool:
+    try:
+        return rel == str(config.capture().relative_to(config.source_base()))
+    except ValueError:
+        return False
+
+
+def _process_capture(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
+    """The Capture page isn't a source doc to merge — its ink is ROUTED out. Read each
+    hand-written item + its todo|idea tag (read_capture.py), then place deterministically:
+    todos -> PUNCHLIST Priority (lists.py); ideas -> Needs You to flesh out (ideas.py). A todo
+    that can't be placed (no punchlist / section) falls back to an idea so it's never lost. The
+    page is then reset to blank so nothing accumulates."""
+    shutil.rmtree(CHECKIN, ignore_errors=True)
+    if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
+        return (rel, "skipped")
+    items_path = CHECKIN / "capture_items.json"
+    if _script("read_capture.py", "--out", str(items_path)) != 0:
+        return (rel, "skipped")
+    items = json.loads(items_path.read_text()) if items_path.exists() else []
+    todos = ideas_n = 0
+    for it in items:
+        text = (it.get("text") or "").strip()
+        if not text:
+            continue
+        if it.get("kind") == "todo" and lists.add_item("Priority", text):
+            todos += 1
+        else:                                  # idea, or an unplaceable todo -> Needs You (never lost)
+            ideas.add(text)
+            ideas_n += 1
+    capture.reset()                            # blank the page; next mirror re-renders it empty
+    reconcile._consume_marks(rel)              # record the ink read + consume its export
+    return (rel, f"capture: {todos} todo(s) -> Priority, {ideas_n} idea(s) -> Needs You")
+
+
 def _process_one(pdf: Path) -> tuple[str, str]:
     """Extract → read (on the subscription) → merge+apply one pending doc.
     Returns (label, status) where status is applied | conflict | skipped."""
@@ -104,6 +142,8 @@ def _process_one(pdf: Path) -> tuple[str, str]:
     mark = config.mark_for(pdf)
     if _is_needs_you(rel):                     # the "Needs You" dashboard — resolve, don't merge
         return _process_needs_you(pdf, rel, mark)
+    if _is_capture(rel):                       # the Capture page — route its ink out, don't merge
+        return _process_capture(pdf, rel, mark)
 
     shutil.rmtree(CHECKIN, ignore_errors=True)   # isolate this doc's ink
     if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
@@ -120,11 +160,16 @@ def drain() -> list[tuple[str, str]]:
     """Process every doc with a pending device annotation (extract -> read -> merge+apply).
     Returns [(label, status)], status in applied|conflict|skipped. Empty if nothing pending.
     Reused by the local watcher (watch.py) so device->desktop runs on the laptop too."""
-    before = len(questions.open_questions())
+    q_before = len(questions.open_questions())
+    i_before = len(ideas.open_ideas())
     results = [_process_one(pdf) for pdf in _pending_all()]
-    if len(questions.open_questions()) < before:
-        # A question cleared this pass (e.g. a Needs You confirmation, which unlike reconcile does
-        # NOT re-mirror the conflicted doc) — re-mirror so its injected page-1 overlay drops.
+    changed = (len(questions.open_questions()) < q_before        # a merge question got confirmed
+               or len(ideas.open_ideas()) != i_before            # idea captured or graduated
+               or any(st.startswith("capture") for _, st in results))  # Capture page was routed+reset
+    if changed:
+        # Needs You / Capture content changed and (unlike reconcile) those paths don't re-mirror
+        # the affected docs themselves — re-mirror so the device reflects it (page-1 overlays
+        # drop, new idea cards appear, the Capture page goes blank).
         _script("mirror.py")
     return results
 
