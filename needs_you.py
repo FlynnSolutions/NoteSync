@@ -33,12 +33,15 @@ def _q_page(q: dict) -> str:
 
 
 def _idea_page(i: dict) -> str:
-    """A parked-idea card: flesh it out, then write a destination to file it."""
+    """A parked-idea card: flesh it out, then write a destination to file it. Any sub-notes
+    captured under the idea are shown so the context isn't lost."""
+    subs = "".join(f"- {s}\n" for s in i.get("subs", []))
     return (f"## Idea  {ideas.id_token(i['id'])}\n\n"
             f"**{i['text']}**\n\n"
-            f"Flesh this out below, then write **priority** or **backlog** to file it into your "
-            f"Punchlist. Leave it blank to keep it here.\n\n"
-            f"_Your notes:_\n\n")
+            + (subs + "\n" if subs else "")
+            + "Flesh this out below, then write **priority** or **backlog** to file it into your "
+            "Punchlist. Leave it blank to keep it here.\n\n"
+            "_Your notes:_\n\n")
 
 
 def build() -> str:

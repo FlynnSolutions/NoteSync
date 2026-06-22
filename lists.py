@@ -37,8 +37,9 @@ def _section_bounds(lines: list[str], section: str) -> tuple[int, int] | None:
     return start, end
 
 
-def add_item(section: str, text: str) -> bool:
-    """Append `- [ ] text` at the end of the named PUNCHLIST section. True on success."""
+def add_item(section: str, text: str, subs: list[str] | None = None) -> bool:
+    """Append `- [ ] text` (plus any `subs` as indented sub-bullets) at the end of the named
+    PUNCHLIST section. True on success."""
     pl = config.punchlist()
     if pl is None or not pl.exists():
         return False
@@ -50,7 +51,10 @@ def add_item(section: str, text: str) -> bool:
     insert = end
     while insert > 0 and not lines[insert - 1].strip():   # sit after the last content line
         insert -= 1
-    item = f"- [ ] {text.strip()}"
-    lines[insert:insert] = ["", item] if (insert > 0 and lines[insert - 1].strip()) else [item]
+    block = [f"- [ ] {text.strip()}"]
+    block += [f"  - {s.strip()}" for s in (subs or []) if s.strip()]
+    if insert > 0 and lines[insert - 1].strip():          # blank line before the new item
+        block = ["", *block]
+    lines[insert:insert] = block
     pl.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return True

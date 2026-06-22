@@ -32,13 +32,20 @@ an ink-only image (just their handwriting) as ground truth.
 Transcribe each distinct item they hand-wrote. IGNORE the printed template — the "# Capture" \
 heading and the instruction paragraph beneath it are not theirs; only transcribe their ink.
 
-Classify each item:
+PRESERVE INDENTATION / NESTING. If a line is indented under another line, it is a SUB-NOTE of \
+the item above it (e.g. agenda points under a task), NOT a separate item — put it in that \
+item's "subs" array. Only top-level (left-most) lines are their own items; indented lines go \
+into the nearest less-indented item's "subs".
+
+Classify each TOP-LEVEL item (sub-notes inherit their parent's kind, don't classify them):
 - "todo": a concrete, actionable, day-to-day task.
 - "idea": a bigger-picture or vague item that needs fleshing out before it is actionable.
 If you are unsure which, use "idea".
 
-Output ONLY a JSON array of objects: [{"text": "<verbatim item>", "kind": "todo"|"idea"}, ...].
-If nothing was written, output []. No prose, no code fences — just the JSON array.\
+Output ONLY a JSON array of objects:
+  [{"text": "<verbatim item>", "kind": "todo"|"idea", "subs": ["<sub-note>", ...]}, ...]
+Use "subs": [] when an item has no sub-notes. If nothing was written, output []. \
+No prose, no code fences — just the JSON array.\
 """
 
 
@@ -72,7 +79,9 @@ def _parse_items(raw: str) -> list[dict]:
     for d in data:
         if isinstance(d, dict) and str(d.get("text", "")).strip():
             kind = d.get("kind") if d.get("kind") in ("todo", "idea") else "idea"
-            out.append({"text": str(d["text"]).strip(), "kind": kind})
+            raw_subs = d.get("subs") if isinstance(d.get("subs"), list) else []
+            subs = [str(s).strip() for s in raw_subs if str(s).strip()]
+            out.append({"text": str(d["text"]).strip(), "kind": kind, "subs": subs})
     return out
 
 

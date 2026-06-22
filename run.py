@@ -89,7 +89,7 @@ def _process_needs_you(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
         return (rel, "skipped")
     order = json.loads(needs_you.ORDER.read_text()) if needs_you.ORDER.exists() else []
     stem = Path(rel).stem
-    idea_text = {i["id"]: i["text"] for i in ideas.open_ideas()}
+    idea_map = {i["id"]: i for i in ideas.open_ideas()}
     confirmed = graduated = 0
     for idx, entry in enumerate(order):              # item idx is rendered on PDF page idx+1
         if isinstance(entry, str):                   # legacy sidecar (ids only) = all questions
@@ -100,16 +100,16 @@ def _process_needs_you(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
             questions.resolve(entry["id"])
             confirmed += 1
         elif entry["kind"] == "idea":                # a fleshed-out idea = read it + maybe file it
-            if _graduate_idea(stem, idx + 1, entry["id"], idea_text.get(entry["id"], "")):
+            if _graduate_idea(stem, idx + 1, entry["id"], idea_map.get(entry["id"], {})):
                 graduated += 1
     reconcile._consume_marks(rel)   # mark the Needs You annotation read + consume its export
     return (rel, f"needs-you: {confirmed} confirmed, {graduated} idea(s) filed")
 
 
-def _graduate_idea(stem: str, pageno: int, iid: str, idea_text: str) -> bool:
+def _graduate_idea(stem: str, pageno: int, iid: str, idea: dict) -> bool:
     """Read a fleshed-out idea card; if it names a destination ("priority"/"backlog"), file
-    "<idea> — <elaboration>" into that PUNCHLIST section and resolve the idea. False (stays
-    parked) when no destination was written or the section couldn't be found."""
+    "<idea> — <elaboration>" (plus the idea's sub-notes) into that PUNCHLIST section and resolve
+    the idea. False (stays parked) when no destination was written or the section wasn't found."""
     full = CHECKIN / f"{stem}-p{pageno}.png"
     ink = CHECKIN / "ink" / f"{stem}-p{pageno}.png"
     out = CHECKIN / f"idea_{iid}.json"
@@ -120,8 +120,9 @@ def _graduate_idea(stem: str, pageno: int, iid: str, idea_text: str) -> bool:
     if dest not in ("priority", "backlog"):
         return False                                 # no destination -> leave it in Needs You
     elab = (res.get("elaboration") or "").strip()
+    idea_text = idea.get("text", "")
     line = f"{idea_text} — {elab}" if (idea_text and elab) else (idea_text or elab)
-    if line and lists.add_item(dest, line):
+    if line and lists.add_item(dest, line, idea.get("subs", [])):
         ideas.resolve(iid)
         return True
     return False
@@ -152,10 +153,11 @@ def _process_capture(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
         text = (it.get("text") or "").strip()
         if not text:
             continue
-        if it.get("kind") == "todo" and lists.add_item("Priority", text):
+        subs = it.get("subs") or []            # indented sub-notes ride with their parent item
+        if it.get("kind") == "todo" and lists.add_item("Priority", text, subs):
             todos += 1
         else:                                  # idea, or an unplaceable todo -> Needs You (never lost)
-            ideas.add(text)
+            ideas.add(text, subs)
             ideas_n += 1
     capture.reset()                            # blank the page; next mirror re-renders it empty
     reconcile._consume_marks(rel)              # record the ink read + consume its export
