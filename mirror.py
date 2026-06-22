@@ -30,6 +30,7 @@ import sys
 import time
 from pathlib import Path
 
+import capture
 import config
 import derive
 import marks
@@ -212,6 +213,7 @@ def main() -> None:
 
     if not args.dry_run:
         needs_you.build()   # refresh the "Needs You" doc so open questions ride out with this mirror
+        capture.ensure()    # keep the blank Capture page present so it mirrors to the device
 
     roots = args.root or SCAN_ROOTS
     docs = collect(roots)

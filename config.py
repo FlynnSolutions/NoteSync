@@ -225,6 +225,21 @@ def needs_you() -> Path:
     return source_base() / (roots[0] if roots else "") / "NEEDS-YOU.md"
 
 
+def capture() -> Path:
+    """The blank idea-capture page mirrored to the device. Default: next to the PUNCHLIST if one
+    is configured, else under the first scan_root (guaranteed to mirror). Override with
+    SUPERNOTE_CAPTURE / config `capture` (relative to source_base, or absolute)."""
+    v = _str("capture", "SUPERNOTE_CAPTURE")
+    if v:
+        p = Path(os.path.expanduser(v))
+        return p if p.is_absolute() else source_base() / v
+    pl = punchlist()
+    if pl is not None:
+        return pl.parent / "CAPTURE.md"
+    roots = scan_roots()
+    return source_base() / (roots[0] if roots else "") / "CAPTURE.md"
+
+
 # --- shell bridge ---------------------------------------------------------
 _KEYS = {
     "source_base": source_base, "supernote_root": supernote_root,
