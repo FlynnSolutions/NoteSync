@@ -57,7 +57,8 @@ SYSTEM = """\
 You transcribe a person's handwritten annotations on a document into STRUCTURED records.
 Accuracy of *targeting* (which line each note is about) matters as much as the words.
 
-You are given one or more pages of a document. For each page you get TWO things: the person's INK ONLY (registration-corrected,
+You are given one or more pages of a document. For each page you get TWO things: the person's INK ONLY
+(registration-corrected,
 black-on-white — exactly what they wrote, positioned where it sits on the page) and that page's
 LINE-MAP — every printed line with its vertical position as `[y=NN.N%]`. You do NOT get an image
 of the printed page; the LINE-MAP *is* the page's text/structure. Ink and line-map share the
@@ -84,7 +85,8 @@ Output ONLY a JSON object (no prose, no code fences):
   "pages": [
     { "page": <int>, "notes": [
         { "text": "<verbatim>", "mark_type": "over-text"|"bracket"|"leader",
-          "target_y": <number %>, "target": "<QUOTED doc line(s), or 'note: <other note>' for a leader to another mark>",
+          "target_y": <number %>,
+          "target": "<QUOTED doc line(s), or 'note: <other note>' for a leader to another mark>",
           "command": <bool>, "confidence": <0.0-1.0> }
     ] }
   ]

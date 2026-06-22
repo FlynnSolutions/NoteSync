@@ -95,7 +95,7 @@ def build_device_doc(marks: dict, source_md: str) -> tuple[str, list[dict], list
     """Return (edited_markdown, actions, unplaced)."""
     edits, actions = _split(marks)
     src_lines = source_md.splitlines()
-    norm_src = [_norm(l) for l in src_lines]
+    norm_src = [_norm(ln) for ln in src_lines]
 
     by_line: dict[int, list[dict]] = {}
     unplaced: list[dict] = []
