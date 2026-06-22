@@ -6,7 +6,7 @@ When reconcile can't safely resolve a 3-way conflict on its own, it records a QU
 instead of guessing. Open questions surface on TWO device-facing surfaces, both GENERATED from
 this store — the source `.md` is never touched, so no merge can ever bake a question into a
 doc permanently:
-  - a "needs you" inbox doc (all open questions in one place), and
+  - the "Needs You" doc (all open questions in one place), and
   - an injected page-1 on the conflicted doc itself (render-time only).
 Answering on either surface resolves the question and clears it from both.
 
@@ -22,9 +22,9 @@ import config
 
 STORE = config.state_dir() / "questions.json"
 
-# The on-device wire format, defined once here so both producers (inbox.py, render.py) agree.
+# The on-device wire format, defined once here so both producers (needs_you.py, render.py) agree.
 # (Answers are read deterministically by page ink, not by parsing this back — see
-# run._process_inbox / reconcile — so there's no parser to keep in sync.)
+# run._process_needs_you / reconcile — so there's no parser to keep in sync.)
 CONFIRM_LINE = "- [ ] looks right as merged"    # the confirm checkbox shown next to a question
 
 
@@ -70,7 +70,7 @@ def record(doc_rel: str, question: str, *, context: str) -> str:
 
 
 def open_questions() -> list[dict]:
-    """Every currently-open question (for the 'needs you' inbox)."""
+    """Every currently-open question (for the "Needs You" doc)."""
     return [q for q in _load() if q["status"] == "open"]
 
 

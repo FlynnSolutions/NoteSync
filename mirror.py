@@ -32,8 +32,8 @@ from pathlib import Path
 
 import config
 import derive
-import inbox
 import marks
+import needs_you
 import questions
 import vcs
 from render import render_bytes
@@ -211,7 +211,7 @@ def main() -> None:
         sys.exit("Google Drive mount not found.")
 
     if not args.dry_run:
-        inbox.build()   # refresh the "needs you" doc so open questions ride out with this mirror
+        needs_you.build()   # refresh the "Needs You" doc so open questions ride out with this mirror
 
     roots = args.root or SCAN_ROOTS
     docs = collect(roots)

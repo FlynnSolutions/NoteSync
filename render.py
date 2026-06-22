@@ -497,9 +497,9 @@ def _render_body(pdf: DocPDF, sections: list[list[str]], usable: float, bottom: 
     splitting a heading from its content. Oversized sections render normally. Section
     height is measured by a throwaway render — robust, and handles tables uniformly."""
     for idx, section in enumerate(sections):
-        if doc_format == "inbox":
+        if doc_format == "paged":
             if idx > 0:                  # one section (question) per page: enables deterministic
-                pdf.add_page()           # per-page answer detection (no LLM) — see run._process_inbox
+                pdf.add_page()           # per-page answer detection (no LLM) — see run._process_needs_you
         else:
             h = _section_height(section, usable, doc_format)
             if h is not None and pdf.get_y() > TOP_MARGIN_MM + 0.5 and pdf.get_y() + h > bottom:

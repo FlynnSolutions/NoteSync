@@ -28,9 +28,9 @@ import sys
 from pathlib import Path
 
 import config
-import inbox
 import marklayer
 import marks
+import needs_you
 import questions
 import reconcile
 
@@ -68,31 +68,31 @@ def _rel_for(pdf: Path) -> str | None:
     return None
 
 
-def _is_inbox(rel: str) -> bool:
+def _is_needs_you(rel: str) -> bool:
     try:
-        return rel == str(config.inbox().relative_to(config.source_base()))
+        return rel == str(config.needs_you().relative_to(config.source_base()))
     except ValueError:
         return False
 
 
-def _process_inbox(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
-    """The inbox is a question dashboard, not a source doc — so we don't merge it, and we read
-    it DETERMINISTICALLY (no LLM): it renders one question per page (format: inbox), so a page
-    that got ink = that question confirmed. marklayer gives per-page ink; inbox.ORDER maps page
+def _process_needs_you(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
+    """The Needs You doc is a question dashboard, not a source doc — so we don't merge it, and we
+    read it DETERMINISTICALLY (no LLM): it renders one question per page (format: paged), so a page
+    that got ink = that question confirmed. marklayer gives per-page ink; needs_you.ORDER maps page
     N -> question id. Resolve the confirmed ones; unanswered pages stay open and come back next
-    inbox. (Free-text corrections go on the conflicted doc's own page-1 instead.)"""
+    pass. (Free-text corrections go on the conflicted doc's own page-1 instead.)"""
     shutil.rmtree(CHECKIN, ignore_errors=True)
     if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
         return (rel, "skipped")
-    order = json.loads(inbox.ORDER.read_text()) if inbox.ORDER.exists() else []
+    order = json.loads(needs_you.ORDER.read_text()) if needs_you.ORDER.exists() else []
     stem = Path(rel).stem
     confirmed = 0
     for i, qid in enumerate(order):                  # question i is rendered on PDF page i+1
         if marklayer.has_ink(CHECKIN / "ink" / f"{stem}-p{i + 1}.png"):
             questions.resolve(qid)
             confirmed += 1
-    reconcile._consume_marks(rel)   # mark the inbox annotation read + consume its export
-    return (rel, f"inbox: confirmed {confirmed}/{len(order)}")
+    reconcile._consume_marks(rel)   # mark the Needs You annotation read + consume its export
+    return (rel, f"needs-you: confirmed {confirmed}/{len(order)}")
 
 
 def _process_one(pdf: Path) -> tuple[str, str]:
@@ -102,8 +102,8 @@ def _process_one(pdf: Path) -> tuple[str, str]:
     if rel is None:
         return (pdf.name, "skipped")          # no/ambiguous manifest entry
     mark = config.mark_for(pdf)
-    if _is_inbox(rel):                         # the "needs you" dashboard — resolve, don't merge
-        return _process_inbox(pdf, rel, mark)
+    if _is_needs_you(rel):                     # the "Needs You" dashboard — resolve, don't merge
+        return _process_needs_you(pdf, rel, mark)
 
     shutil.rmtree(CHECKIN, ignore_errors=True)   # isolate this doc's ink
     if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
@@ -123,7 +123,7 @@ def drain() -> list[tuple[str, str]]:
     before = len(questions.open_questions())
     results = [_process_one(pdf) for pdf in _pending_all()]
     if len(questions.open_questions()) < before:
-        # A question cleared this pass (e.g. an inbox confirmation, which unlike reconcile does
+        # A question cleared this pass (e.g. a Needs You confirmation, which unlike reconcile does
         # NOT re-mirror the conflicted doc) — re-mirror so its injected page-1 overlay drops.
         _script("mirror.py")
     return results
