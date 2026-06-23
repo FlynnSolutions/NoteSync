@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
@@ -49,6 +50,13 @@ EXCLUDE_DIRS = {
     "worktrees", "archive", ".github", ".claude", "packages", "site-packages",
     ".agents",
 }
+# Personal "don't review this on the tablet" dir patterns — fnmatch globs (e.g. '_evidence*'),
+# config-driven so the repo stays de-personalized.
+USER_EXCLUDE = list(config.mirror_exclude())
+
+
+def _user_excluded(dirname: str) -> bool:
+    return any(fnmatch.fnmatch(dirname, pat) for pat in USER_EXCLUDE)
 
 
 def _is_noise(p: Path) -> bool:
@@ -106,10 +114,10 @@ def collect(roots: list[str]) -> list[Path]:
             print(f"  WARN: {start} not found", file=sys.stderr)
             continue
         for dirpath, dirnames, filenames in os.walk(start):
-            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS and not _user_excluded(d)]
             for f in filenames:
                 p = Path(dirpath) / f
-                if p.suffix.lower() in EXTENSIONS and not _is_noise(p):
+                if p.suffix.lower() in EXTENSIONS and not _is_noise(p) and not _user_excluded(f):
                     found.append(p)
     return sorted(found)
 

@@ -62,6 +62,15 @@ def scan_roots() -> list[str]:
     return list(_file_cfg().get("scan_roots", []))
 
 
+def mirror_exclude() -> list[str]:
+    """Directory NAMES skipped when mirroring to the device — personal clutter you don't review
+    on the tablet (e.g. '_evidence', 'signals', 'claude'). Sources are untouched; the docs just
+    don't render to the device. SUPERNOTE_MIRROR_EXCLUDE (comma-sep) or config `mirror_exclude`."""
+    if v := os.environ.get("SUPERNOTE_MIRROR_EXCLUDE"):
+        return [r.strip() for r in v.split(",") if r.strip()]
+    return list(_file_cfg().get("mirror_exclude", []))
+
+
 # --- Supernote / Drive side ----------------------------------------------
 @lru_cache(maxsize=1)
 def supernote_root() -> Path | None:
