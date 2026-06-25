@@ -115,7 +115,9 @@ way to source — it validated the read→synthesize→apply→reconcile chain e
   `sync.sh process <rel> --apply` (read ink → 3-way merge → apply → re-mirror). Needs
   `ANTHROPIC_API_KEY`. This is Phase-B step B1, runnable locally now.
 
-## Pilot content
+## Documentation standard
 
-The documentation standard ([`DOC_STANDARD.md`](./DOC_STANDARD.md)) is being
-piloted on a private project.
+This repo is a **governed consumer** of the shared standard, which lives canonically in
+[`Dagda/doc-standard`](../../Dagda/doc-standard/DOC_STANDARD.md) (registered in its
+`projects.toml`). The slots here (`00`–`05`, `INDEX`) conform to it; the spec itself is not
+forked into this repo.
