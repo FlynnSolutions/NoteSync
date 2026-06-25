@@ -27,7 +27,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import capture
 import config
+import ideas
+import lists
 import marklayer
 import marks
 import needs_you
@@ -86,13 +89,80 @@ def _process_needs_you(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
         return (rel, "skipped")
     order = json.loads(needs_you.ORDER.read_text()) if needs_you.ORDER.exists() else []
     stem = Path(rel).stem
-    confirmed = 0
-    for i, qid in enumerate(order):                  # question i is rendered on PDF page i+1
-        if marklayer.has_ink(CHECKIN / "ink" / f"{stem}-p{i + 1}.png"):
-            questions.resolve(qid)
+    idea_map = {i["id"]: i for i in ideas.open_ideas()}
+    confirmed = graduated = 0
+    for idx, entry in enumerate(order):              # item idx is rendered on PDF page idx+1
+        if isinstance(entry, str):                   # legacy sidecar (ids only) = all questions
+            entry = {"kind": "q", "id": entry}
+        if not marklayer.has_ink(CHECKIN / "ink" / f"{stem}-p{idx + 1}.png"):
+            continue
+        if entry["kind"] == "q":                     # a question page with ink = merge confirmed
+            questions.resolve(entry["id"])
             confirmed += 1
+        elif entry["kind"] == "idea":                # a fleshed-out idea = read it + maybe file it
+            if _graduate_idea(stem, idx + 1, entry["id"], idea_map.get(entry["id"], {})):
+                graduated += 1
     reconcile._consume_marks(rel)   # mark the Needs You annotation read + consume its export
-    return (rel, f"needs-you: confirmed {confirmed}/{len(order)}")
+    return (rel, f"needs-you: {confirmed} confirmed, {graduated} idea(s) filed")
+
+
+def _graduate_idea(stem: str, pageno: int, iid: str, idea: dict) -> bool:
+    """Read a fleshed-out idea card; if it names a destination (you wrote where it goes), file
+    "<idea> — <elaboration>" (plus its sub-notes) into the `📥 From Supernote` section of the idea's
+    OWN project tracker (idea['project']) and resolve it. False (stays parked) when no destination
+    was written or the project has no configured tracker."""
+    full = CHECKIN / f"{stem}-p{pageno}.png"
+    ink = CHECKIN / "ink" / f"{stem}-p{pageno}.png"
+    out = CHECKIN / f"idea_{iid}.json"
+    if _script("read_idea.py", "--full", str(full), "--ink", str(ink), "--out", str(out)) != 0:
+        return False
+    res = json.loads(out.read_text()) if out.exists() else {}
+    if not res.get("destination"):
+        return False                                 # no destination written -> leave it in Needs You
+    elab = (res.get("elaboration") or "").strip()
+    idea_text = idea.get("text", "")
+    line = f"{idea_text} — {elab}" if (idea_text and elab) else (idea_text or elab)
+    target = config.capture_target_for_root(idea.get("project"))
+    if line and lists.add_to_inbox(target, line, idea.get("subs", [])):
+        ideas.resolve(iid)
+        return True
+    return False
+
+
+def _is_capture(rel: str) -> bool:
+    return config.capture_root_for(rel) is not None      # any project's <root>/CAPTURE.md
+
+
+def _process_capture(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
+    """The Capture page isn't a source doc to merge — its ink is ROUTED out. Read each
+    hand-written item + its todo|idea tag (read_capture.py), then place deterministically:
+    todos -> PUNCHLIST Priority (lists.py); ideas -> Needs You to flesh out (ideas.py). A todo
+    that can't be placed (no punchlist / section) falls back to an idea so it's never lost. The
+    page is then reset to blank so nothing accumulates."""
+    shutil.rmtree(CHECKIN, ignore_errors=True)
+    if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
+        return (rel, "skipped")
+    items_path = CHECKIN / "capture_items.json"
+    if _script("read_capture.py", "--out", str(items_path)) != 0:
+        return (rel, "skipped")
+    items = json.loads(items_path.read_text()) if items_path.exists() else []
+    root = config.capture_root_for(rel)        # which project this page belongs to
+    target = config.capture_target_for_root(root)
+    project = Path(rel).parent.name
+    todos = ideas_n = 0
+    for it in items:
+        text = (it.get("text") or "").strip()
+        if not text:
+            continue
+        subs = it.get("subs") or []            # indented sub-notes ride with their parent item
+        if it.get("kind") == "todo" and lists.add_to_inbox(target, text, subs):
+            todos += 1
+        else:                                  # idea, or an unplaceable todo -> Needs You (never lost)
+            ideas.add(text, subs, project=root)
+            ideas_n += 1
+    capture.reset(config.source_base() / rel)  # blank THIS page; next mirror re-renders it empty
+    reconcile._consume_marks(rel)              # record the ink read + consume its export
+    return (rel, f"capture[{project}]: {todos} todo(s) -> tracker, {ideas_n} idea(s) -> Needs You")
 
 
 def _process_one(pdf: Path) -> tuple[str, str]:
@@ -104,6 +174,8 @@ def _process_one(pdf: Path) -> tuple[str, str]:
     mark = config.mark_for(pdf)
     if _is_needs_you(rel):                     # the "Needs You" dashboard — resolve, don't merge
         return _process_needs_you(pdf, rel, mark)
+    if _is_capture(rel):                       # the Capture page — route its ink out, don't merge
+        return _process_capture(pdf, rel, mark)
 
     shutil.rmtree(CHECKIN, ignore_errors=True)   # isolate this doc's ink
     if _script("marklayer.py", str(mark), "--pdf", str(pdf), "--out", str(CHECKIN)) != 0:
@@ -120,11 +192,16 @@ def drain() -> list[tuple[str, str]]:
     """Process every doc with a pending device annotation (extract -> read -> merge+apply).
     Returns [(label, status)], status in applied|conflict|skipped. Empty if nothing pending.
     Reused by the local watcher (watch.py) so device->desktop runs on the laptop too."""
-    before = len(questions.open_questions())
+    q_before = len(questions.open_questions())
+    i_before = len(ideas.open_ideas())
     results = [_process_one(pdf) for pdf in _pending_all()]
-    if len(questions.open_questions()) < before:
-        # A question cleared this pass (e.g. a Needs You confirmation, which unlike reconcile does
-        # NOT re-mirror the conflicted doc) — re-mirror so its injected page-1 overlay drops.
+    changed = (len(questions.open_questions()) < q_before        # a merge question got confirmed
+               or len(ideas.open_ideas()) != i_before            # idea captured or graduated
+               or any(st.startswith("capture") for _, st in results))  # Capture page was routed+reset
+    if changed:
+        # Needs You / Capture content changed and (unlike reconcile) those paths don't re-mirror
+        # the affected docs themselves — re-mirror so the device reflects it (page-1 overlays
+        # drop, new idea cards appear, the Capture page goes blank).
         _script("mirror.py")
     return results
 
@@ -140,7 +217,7 @@ def main() -> None:
     ap.add_argument("--no-digest", action="store_true", help="skip the digest step")
     args = ap.parse_args()
 
-    print(f"== supernote-sync run (backend: {config.backend()}) ==")
+    print(f"== NoteSync run (backend: {config.backend()}) ==")
 
     if not args.no_digest:
         print("\n[1/3] digests due today")

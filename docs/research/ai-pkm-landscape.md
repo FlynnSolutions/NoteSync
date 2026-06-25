@@ -1,11 +1,11 @@
 # AI-native note-taking & PKM tooling — landscape
 
 > Research snapshot, 2026-06-06. Multi-agent web scan (5 category researchers →
-> synthesis) run to inform supernote-sync's evolution into a unified human+Claude
+> synthesis) run to inform NoteSync's evolution into a unified human+Claude
 > knowledge architecture. Claims flagged `[single-source]` or listed under
 > *Verification needed* are not yet triangulated — treat as leads, not facts.
 
-**Executive summary.** Across four families — local-first Markdown PKM, AI-native cloud apps, digital gardens, and agent-memory frameworks — the field is splitting along one decisive axis for a human+agent knowledge base: *is the canonical store plain Markdown on disk, or a proprietary store reached only through an API?* Plain-Markdown tools (Obsidian, Foam, Quartz, the LLM-wiki / docs-as-code pattern) are trivially agent-retrievable because the agent and the human share the same files; AI-native apps (Mem, Reflect, Notion, Tana) deliver strong agent access too, but via first-party MCP/REST rather than file reads, trading vault portability for vendor lock-in. The 2025–2026 inflection is the formalization of *agent-facing conventions on top of plain files* — AGENTS.md, llms.txt, frontmatter-gated rules, and loaded index/map files — which is exactly the territory supernote-sync already occupies. The substrate (files) retrieves trivially; the semantics (what's atomic, why two notes link, which fact is current) remain human authorial judgment that no tool yet encodes as an enforced, agent-trustable spec.
+**Executive summary.** Across four families — local-first Markdown PKM, AI-native cloud apps, digital gardens, and agent-memory frameworks — the field is splitting along one decisive axis for a human+agent knowledge base: *is the canonical store plain Markdown on disk, or a proprietary store reached only through an API?* Plain-Markdown tools (Obsidian, Foam, Quartz, the LLM-wiki / docs-as-code pattern) are trivially agent-retrievable because the agent and the human share the same files; AI-native apps (Mem, Reflect, Notion, Tana) deliver strong agent access too, but via first-party MCP/REST rather than file reads, trading vault portability for vendor lock-in. The 2025–2026 inflection is the formalization of *agent-facing conventions on top of plain files* — AGENTS.md, llms.txt, frontmatter-gated rules, and loaded index/map files — which is exactly the territory NoteSync already occupies. The substrate (files) retrieves trivially; the semantics (what's atomic, why two notes link, which fact is current) remain human authorial judgment that no tool yet encodes as an enforced, agent-trustable spec.
 
 ## Taxonomy
 
@@ -17,7 +17,7 @@
 
 **Agent memory & context-engineering frameworks** — two sub-families. *Runtime memory* (Letta/MemGPT, mem0, LangGraph/LangMem): memory as a managed DB store the agent reads/writes mid-session, a small always-in-context "core" tier plus a large out-of-context tier retrieved by semantic similarity + metadata. *Optimizes for:* token efficiency at scale and statefulness across sessions; **not** file-readable by an outside agent. *Coding-agent "memory file" conventions* (CLAUDE.md + auto memory, AGENTS.md, Cursor `.mdc`, Windsurf rules): human-curated (or agent-appended) Markdown loaded into the prompt. *Optimizes for:* portable, version-controllable, plain-text instruction sets — converging on **a small always-loaded index + topic files loaded on demand, with frontmatter governing relevance.**
 
-**Plain-text / Git-native KBs + "Markdown-for-agents" conventions** (AGENTS.md, llms.txt, Org-roam, the LLM-wiki "second brain," docs-as-code + Spec Kit). *Optimizes for:* a *single human-readable source of truth that is simultaneously what the human edits and what the agent retrieves against* — no separate AI index that can drift. This is the synthesis category supernote-sync sits in.
+**Plain-text / Git-native KBs + "Markdown-for-agents" conventions** (AGENTS.md, llms.txt, Org-roam, the LLM-wiki "second brain," docs-as-code + Spec Kit). *Optimizes for:* a *single human-readable source of truth that is simultaneously what the human edits and what the agent retrieves against* — no separate AI index that can drift. This is the synthesis category NoteSync sits in.
 
 ## Comparison
 
@@ -50,7 +50,7 @@
 
 **Small always-loaded core + large load-on-demand tier.** Both runtime frameworks and file conventions land on the same architecture. Letta: always-in-context core blocks vs paged archival/recall. CLAUDE.md: only the first ~200 lines / 25KB of MEMORY.md load at start, the rest read on demand. This is the file-world echo of MemGPT's "LLM-as-OS paging."
 
-**Frontmatter as the relevance/activation gate.** The richest model is Cursor `.mdc`: `description` (agent reads it to decide whether to pull the rule in), `globs` (auto-attach on matching files), `alwaysApply` (load every turn). Claude Code's `.claude/rules/*.md` `paths:` globs do the same. This is the explicit anti-bloat mechanism — load by relevance, not all at once. supernote-sync's `description:` field is precisely this pattern.
+**Frontmatter as the relevance/activation gate.** The richest model is Cursor `.mdc`: `description` (agent reads it to decide whether to pull the rule in), `globs` (auto-attach on matching files), `alwaysApply` (load every turn). Claude Code's `.claude/rules/*.md` `paths:` globs do the same. This is the explicit anti-bloat mechanism — load by relevance, not all at once. NoteSync's `description:` field is precisely this pattern.
 
 **Traverse via links, don't re-embed.** Wikilinks + backlinks + one-line relationship descriptions let an agent walk the graph deterministically rather than running similarity search. Backlinks/graphs in plain-MD tools are *derived at build time from the same link syntax*, so an agent can reconstruct them. mem0's 2026 "hybrid memory" reaches for the same idea inside a DB (vector + graph traversal).
 
@@ -67,7 +67,7 @@
 ## What translates to a Claude-readable Markdown base
 
 **Borrow these (they directly help agent retrieval):**
-- **A loaded index/map file** (MEMORY.md / index.md / KNOWLEDGE_GRAPH.md) as the agent's stable entry point — supernote-sync already does this.
+- **A loaded index/map file** (MEMORY.md / index.md / KNOWLEDGE_GRAPH.md) as the agent's stable entry point — NoteSync already does this.
 - **Frontmatter relevance metadata** — a `description:` (Cursor's "agent-requested" mode) plus optional path/glob scoping; this is the field-world's only real anti-bloat lever.
 - **One-fact / one-concept per file** — atomic notes give precise retrieval and clean diffs; already in place here.
 - **Wikilinks + backlinks with a one-line "why linked"** so the agent traverses instead of re-embedding.
@@ -75,7 +75,7 @@
 - **Archive-don't-delete with a non-authoritative banner** + a **lint/health-check** routine to fight index drift and broken links (from the LLM-wiki and docs-as-code patterns).
 - **Explicit ADD/UPDATE/DELETE-on-write discipline** (borrowed from mem0) to attack stale facts — the field's clearest unsolved gap in file-based systems.
 - **Three-tier boundaries** (always-do / ask-first / never-do, from AGENTS.md) for any instruction-style memory.
-- **Git 3-way merge as the reconciliation engine** — supernote-sync already merges this way; it's the right substrate for human+agent concurrent edits.
+- **Git 3-way merge as the reconciliation engine** — NoteSync already merges this way; it's the right substrate for human+agent concurrent edits.
 
 **Human-only — won't help agent retrieval (don't over-invest for the agent's sake):**
 - **Growth/epistemic status labels** (seedling/budding/evergreen) — authorial judgment, no enforced spec; useful to humans, opaque to agents unless promoted to *structured* frontmatter the agent is told to honor.
@@ -89,12 +89,12 @@
 
 **The gap.** Almost every tool optimizes for one of two users: the *human second-brain* (local-first Markdown PKM, gardens — agent access is an afterthought you bolt on) or the *agent* (runtime memory frameworks — nothing for a human to read; DB-bound). The AI-native cloud apps serve both but only inside a proprietary store reached via MCP. The genuinely underserved position is **a solo technical founder who wants ONE Git-tracked Markdown base that is simultaneously their own second brain and their coding agent's durable memory** — plain files as the single source of truth, no separate AI index that can drift, with the agent as a first-class read/write actor. Only a handful of patterns aim here: the LLM-wiki "second brain," docs-as-code + Spec Kit, and the CLAUDE.md/AGENTS.md memory-file conventions. None of these is a polished product — they're conventions and reference repos. That's the whitespace.
 
-**Where supernote-sync is positioned.** Its existing memory pattern — *one-fact-per-file, a frontmatter `description:` for relevance matching, a loaded INDEX file, `[[wikilinks]]`* — is essentially the convergent best-practice the whole agent-facing-Markdown movement is independently arriving at:
+**Where NoteSync is positioned.** Its existing memory pattern — *one-fact-per-file, a frontmatter `description:` for relevance matching, a loaded INDEX file, `[[wikilinks]]`* — is essentially the convergent best-practice the whole agent-facing-Markdown movement is independently arriving at:
 - **One-fact-per-file** = atomic notes (gardens) + topic-per-file (CLAUDE.md auto memory, `.claude/rules`) → precise retrieval, clean diffs. **Already right.**
 - **Frontmatter `description:` for relevance** = Cursor `.mdc`'s "agent-requested" mode, the richest relevance gate in the field. **Already right — and ahead of AGENTS.md**, which has *no* relevance mechanism beyond file location.
 - **Loaded INDEX file** = MEMORY.md / llms.txt / KNOWLEDGE_GRAPH.md — the small-always-loaded-core tier. **Already right.**
 - **`[[wikilinks]]`** = the universal traverse-don't-embed primitive. **Already right.**
-- **Plus a structural edge the convention crowd lacks:** supernote-sync already uses **Git 3-way merge** as its reconciliation engine — exactly the mechanism needed for human+agent concurrent edits, which the memory-file conventions (last-write-wins, "agent picks arbitrarily") don't have.
+- **Plus a structural edge the convention crowd lacks:** NoteSync already uses **Git 3-way merge** as its reconciliation engine — exactly the mechanism needed for human+agent concurrent edits, which the memory-file conventions (last-write-wins, "agent picks arbitrarily") don't have.
 
 **What to refine:**
 1. **Add explicit write-time conflict resolution.** The field's clearest gap is stale memory; borrow mem0's ADD/UPDATE/DELETE/NOOP discipline so superseded facts get updated/retired, not silently duplicated. Your Git 3-way merge handles *concurrent* edits but not *semantic supersession*.

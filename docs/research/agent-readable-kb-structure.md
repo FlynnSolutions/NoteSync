@@ -12,7 +12,7 @@
 The convergent, evidence-backed pattern is: **plain Markdown atoms in Git + a small
 always-loaded index + the rest loaded just-in-time, with frontmatter as the relevance
 signal and typed links for traversal.** This is — almost exactly — the pattern
-supernote-sync already uses (one-fact-per-file, frontmatter `description:`, a loaded
+NoteSync already uses (one-fact-per-file, frontmatter `description:`, a loaded
 `MEMORY.md`/`INDEX.md`, `[[wikilinks]]`). The research validates it and points to three
 specific refinements (typed links, a `status:` field, and a load-on-demand split).
 
@@ -91,7 +91,7 @@ for human eyes; epistemic-status labels (seedling/evergreen) only help the agent
 promoted to *structured frontmatter the agent is told to honor*. (Cross-referenced from
 the [[ai-pkm-landscape]] scan.)
 
-## Implications for supernote-sync's existing pattern
+## Implications for NoteSync's existing pattern
 
 | Existing pattern | Verdict | Refinement |
 |---|---|---|

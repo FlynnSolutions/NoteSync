@@ -1,6 +1,6 @@
 # Recipes
 
-supernote-sync syncs *any* Markdown tree — it has no opinion about your folders. Below are
+NoteSync syncs *any* Markdown tree — it has no opinion about your folders. Below are
 a few structures that work well, each one a suggestion you can ignore or adapt. The only
 real conventions are in [`docs/05-conventions.md`](./docs/05-conventions.md): checkboxes
 style themselves, and an optional `---` frontmatter block tunes a doc. Runnable versions of

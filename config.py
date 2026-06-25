@@ -62,6 +62,35 @@ def scan_roots() -> list[str]:
     return list(_file_cfg().get("scan_roots", []))
 
 
+def mirror_exclude() -> list[str]:
+    """Directory NAMES skipped when mirroring to the device — personal clutter you don't review
+    on the tablet (e.g. '_evidence', 'signals', 'claude'). Sources are untouched; the docs just
+    don't render to the device. SUPERNOTE_MIRROR_EXCLUDE (comma-sep) or config `mirror_exclude`."""
+    if v := os.environ.get("SUPERNOTE_MIRROR_EXCLUDE"):
+        return [r.strip() for r in v.split(",") if r.strip()]
+    return list(_file_cfg().get("mirror_exclude", []))
+
+
+def mirror_include() -> list[str]:
+    """Glob patterns that FORCE a doc onto the device even in pinned mode — the override for a
+    dropped-in doc (e.g. a design doc you want to read once) without editing its frontmatter.
+    Matched against the source-relative path AND the filename, so both `*-TDD.md` and `_review/*`
+    work. SUPERNOTE_MIRROR_INCLUDE (comma-sep) or config `mirror_include`."""
+    if v := os.environ.get("SUPERNOTE_MIRROR_INCLUDE"):
+        return [r.strip() for r in v.split(",") if r.strip()]
+    return list(_file_cfg().get("mirror_include", []))
+
+
+def mirror_pinned() -> bool:
+    """When true, mirror ONLY docs whose frontmatter has `device: true` — a curated device view.
+    Everything else stays in the repo as reference (read on the laptop, not shown on the tablet).
+    Default false (mirror everything under scan_roots). SUPERNOTE_MIRROR_PINNED / config."""
+    v = os.environ.get("SUPERNOTE_MIRROR_PINNED")
+    if v is None:
+        v = str(_file_cfg().get("mirror_pinned", "")).strip()
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 # --- Supernote / Drive side ----------------------------------------------
 @lru_cache(maxsize=1)
 def supernote_root() -> Path | None:
@@ -79,8 +108,20 @@ def _under_root(*parts: str) -> Path | None:
 
 
 def library() -> Path | None:
-    """Where mirrored PDFs and their `.mark` sidecars live, or None if no root."""
-    return _under_root("Document", "Library")
+    """Where mirrored PDFs and their `.mark` sidecars live, or None if no root. Default
+    `Document/Library`; set `library_subdir = ""` (config / SUPERNOTE_LIBRARY_SUBDIR) to render
+    straight into `Document/` — fewer taps, but then the prune namespace IS the whole Document
+    folder, so never drop manual files there."""
+    # An explicit "" means flatten (render into Document/); absent means the "Library" default.
+    # (Can't use _str — it treats empty-string as unset and would fall back to the default.)
+    env = os.environ.get("SUPERNOTE_LIBRARY_SUBDIR")
+    if env is not None:
+        sub = env.strip()
+    else:
+        cfg = _file_cfg()
+        sub = str(cfg.get("library_subdir", "Library")).strip() if "library_subdir" in cfg else "Library"
+    parts = ["Document", sub] if sub else ["Document"]
+    return _under_root(*parts)
 
 
 def document_dir() -> Path | None:
@@ -223,6 +264,36 @@ def needs_you() -> Path:
         return p if p.is_absolute() else source_base() / v
     roots = scan_roots()
     return source_base() / (roots[0] if roots else "") / "NEEDS-YOU.md"
+
+
+def capture_pages() -> list[Path]:
+    """One blank Capture page per project (scan_root): `<root>/CAPTURE.md`. Each is `device: true`,
+    so it shows at Document/<Area>/CAPTURE.pdf and routes notes into THAT project (run._process_capture)."""
+    return [source_base() / root / "CAPTURE.md" for root in scan_roots()]
+
+
+def capture_targets() -> dict[str, str]:
+    """Map of scan_root -> the project's work tracker that captured to-dos append to, under a
+    `## 📥 From Supernote` section (config `[capture_targets]`). Captured ideas instead go to the
+    global Needs You tagged with the project, then graduate back to this same tracker."""
+    return {str(k): str(v) for k, v in _file_cfg().get("capture_targets", {}).items()}
+
+
+def capture_root_for(rel: str) -> str | None:
+    """Which scan_root a capture page (source-relative `<root>/CAPTURE.md`) belongs to."""
+    for root in scan_roots():
+        if rel == f"{root}/CAPTURE.md":
+            return root
+    return None
+
+
+def capture_target_for_root(root: str | None) -> Path | None:
+    """The tracker doc a project's captured items route to (absolute or source_base-relative)."""
+    tgt = capture_targets().get(root or "")
+    if not tgt:
+        return None
+    p = Path(os.path.expanduser(tgt))
+    return p if p.is_absolute() else source_base() / tgt
 
 
 # --- shell bridge ---------------------------------------------------------

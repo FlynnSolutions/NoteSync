@@ -1,3 +1,3 @@
-# Dev tooling only (not needed to run supernote-sync). Install with:
+# Dev tooling only (not needed to run NoteSync). Install with:
 #   pip install -r requirements-dev.txt
 ruff>=0.6        # lint + format; config in pyproject.toml

@@ -1,4 +1,4 @@
-# supernote-sync config — copy to config.toml and edit. config.toml is gitignored.
+# NoteSync config — copy to config.toml and edit. config.toml is gitignored.
 # Every value can also be set via a SUPERNOTE_* env var (which wins), e.g. for a Lambda:
 #   SUPERNOTE_SOURCE_BASE, SUPERNOTE_SCAN_ROOTS (comma-sep), SUPERNOTE_ROOT,
 #   SUPERNOTE_MODEL, SUPERNOTE_CHECKLIST.

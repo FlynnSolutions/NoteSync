@@ -1,8 +1,8 @@
-# supernote-sync — persistent container that runs the sync loop with your laptop closed.
+# NoteSync — persistent container that runs the sync loop with your laptop closed.
 # It reads handwriting on your Claude subscription (`claude -p`), so the image bundles the
 # Claude Code CLI alongside the Python tool. Multi-arch (amd64 + arm64/Graviton/Lightsail).
 # Build from the REPO ROOT:
-#   docker build -f deploy/Dockerfile -t supernote-sync .
+#   docker build -f deploy/Dockerfile -t NoteSync .
 FROM python:3.13-slim
 
 # Runtime deps: poppler (pdftoppm), rclone (Drive API — copy, NOT a FUSE mount, so no

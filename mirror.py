@@ -22,14 +22,17 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import time
 from pathlib import Path
 
+import capture
 import config
 import derive
 import marks
@@ -48,6 +51,60 @@ EXCLUDE_DIRS = {
     "worktrees", "archive", ".github", ".claude", "packages", "site-packages",
     ".agents",
 }
+# Personal "don't review this on the tablet" dir patterns — fnmatch globs (e.g. '_evidence*'),
+# config-driven so the repo stays de-personalized.
+USER_EXCLUDE = list(config.mirror_exclude())
+USER_INCLUDE = list(config.mirror_include())     # globs that force a doc onto the device in pinned mode
+PINNED = config.mirror_pinned()                  # True ⇒ mirror ONLY docs that opt in via `device:`
+_FM = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---", re.S)
+_DEVICE = re.compile(r"^device:\s*(\S+)\s*$", re.M | re.I)
+
+
+def _user_excluded(dirname: str) -> bool:
+    return any(fnmatch.fnmatch(dirname, pat) for pat in USER_EXCLUDE)
+
+
+def _force_included(rel: str, name: str) -> bool:
+    """A mirror_include glob override — pull a specific doc onto the device despite pinned mode."""
+    return any(fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(name, pat) for pat in USER_INCLUDE)
+
+
+def _device_placement(p: Path) -> str | None:
+    """How a doc appears on the device, from frontmatter `device:` — 'root' (Document/ top level),
+    'area' (under its <area>/), or None (not shown)."""
+    try:
+        head = p.read_text(encoding="utf-8", errors="ignore")[:1200]
+    except OSError:
+        return None
+    m = _FM.match(head)
+    if not m:
+        return None
+    dm = _DEVICE.search(m.group(1))
+    if not dm:
+        return None
+    val = dm.group(1).strip().strip("\"'").lower()
+    if val == "root":
+        return "root"
+    return "area" if val in ("true", "yes", "1") else None
+
+
+def _device_rel(src: Path, rel: Path) -> Path:
+    """The doc's path ON THE DEVICE. In pinned (curated) mode, FLATTEN: `device: root` →
+    Document/<doc> (top level, e.g. START-HERE); `device: true` → `<area>/<doc>` (one level deep).
+    Full-mirror mode preserves the source path (flattening would collide like-named files). The
+    manifest keeps the real source_rel, so the round-trip is unaffected."""
+    if not PINNED:
+        return rel.with_suffix(".pdf")
+    if _device_placement(src) == "root":
+        return Path(rel.stem + ".pdf")
+    parts = rel.parts
+    if parts and parts[0] == "Projects" and len(parts) >= 2:
+        area = parts[1]
+    elif parts and parts[0] == "Personal":
+        area = "Personal"
+    else:
+        area = parts[0] if parts else "misc"
+    return Path(area) / (rel.stem + ".pdf")
 
 
 def _is_noise(p: Path) -> bool:
@@ -105,10 +162,13 @@ def collect(roots: list[str]) -> list[Path]:
             print(f"  WARN: {start} not found", file=sys.stderr)
             continue
         for dirpath, dirnames, filenames in os.walk(start):
-            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS and not _user_excluded(d)]
             for f in filenames:
                 p = Path(dirpath) / f
-                if p.suffix.lower() in EXTENSIONS and not _is_noise(p):
+                if p.suffix.lower() in EXTENSIONS and not _is_noise(p) and not _user_excluded(f):
+                    if (PINNED and _device_placement(p) is None
+                            and not _force_included(str(p.relative_to(BASE)), f)):
+                        continue                 # curated mode: only `device:` docs + mirror_include overrides
                     found.append(p)
     return sorted(found)
 
@@ -212,6 +272,7 @@ def main() -> None:
 
     if not args.dry_run:
         needs_you.build()   # refresh the "Needs You" doc so open questions ride out with this mirror
+        capture.ensure()    # keep the blank Capture page present so it mirrors to the device
 
     roots = args.root or SCAN_ROOTS
     docs = collect(roots)
@@ -224,6 +285,7 @@ def main() -> None:
         prev = {e["source_rel"]: e for e in json.loads(MANIFEST.read_text())}
 
     manifest = []
+    seen_device: dict[str, str] = {}                 # device pdf path -> source_rel (collision guard)
     rederived_docs: list[Path] = []
     rendered = skipped = protected = unchanged_out = 0
     for src in docs:
@@ -234,7 +296,11 @@ def main() -> None:
         if not args.dry_run and _rederive_in_place(src):
             print(f"  rederived counts: {rel}")
             rederived_docs.append(src)
-        pdf_rel = rel.with_suffix(".pdf")
+        pdf_rel = _device_rel(src, rel)
+        if seen_device.setdefault(str(pdf_rel), str(rel)) != str(rel):  # two docs -> same device path
+            print(f"  WARN device-path collision at {pdf_rel} — keeping full path for {rel}", file=sys.stderr)
+            pdf_rel = rel.with_suffix(".pdf")
+            seen_device[str(pdf_rel)] = str(rel)
         cur_hash = _sha256(src)
         cur_qfp = _qfp(rel)
         if args.dry_run:

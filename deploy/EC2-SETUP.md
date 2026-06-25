@@ -49,9 +49,9 @@ default). No double-processing, no races; fail-safe if the laptop crashes. Tune 
   (note: **no `--cap-add`/`--device` needed** — there's no FUSE mount):
   ```cron
   */10 * * * * docker run --rm --cap-drop ALL --security-opt no-new-privileges \
-      -v /home/ubuntu/supernote-sync/deploy/rclone.conf:/root/.config/rclone/rclone.conf:ro \
+      -v /home/ubuntu/NoteSync/deploy/rclone.conf:/root/.config/rclone/rclone.conf:ro \
       -v sync-work:/work -v sync-state:/state -v sync-drive:/drive \
-      --env-file /home/ubuntu/supernote-sync/deploy/loop.env -e RUN_MODE=oneshot supernote-sync
+      --env-file /home/ubuntu/NoteSync/deploy/loop.env -e RUN_MODE=oneshot NoteSync
   ```
   and your phone **heartbeat** fires the *same* one-shot on demand. Either way the pass is
   **serial** — `run.py` drains pending docs one at a time, so it never bursts the
@@ -123,8 +123,8 @@ sudo usermod -aG docker ubuntu
 **On the host** — get the tool code (clone if the repo is public; otherwise `scp`/`rsync` it
 up from your laptop) and fill in `loop.env`:
 ```bash
-git clone https://github.com/FlynnSolutions/supernote-sync.git   # or copy it up if private
-cd supernote-sync/deploy
+git clone https://github.com/FlynnSolutions/NoteSync.git   # or copy it up if private
+cd NoteSync/deploy
 cp loop.env.example loop.env
 nano loop.env            # paste CLAUDE_CODE_OAUTH_TOKEN, set DOCS_REPO
 ```
@@ -132,7 +132,7 @@ nano loop.env            # paste CLAUDE_CODE_OAUTH_TOKEN, set DOCS_REPO
 **On your laptop** (a separate terminal) — copy your Drive credentials up; without this the
 container can't reach Drive and step 4 fails at the first sync:
 ```bash
-scp ~/.config/rclone/rclone.conf ubuntu@<instance-ip>:~/supernote-sync/deploy/rclone.conf
+scp ~/.config/rclone/rclone.conf ubuntu@<instance-ip>:~/NoteSync/deploy/rclone.conf
 ```
 (`GITHUB_TOKEN` goes in `loop.env`, not a separate file.) `loop.env` and `rclone.conf` are
 gitignored — keep them only on the host.
@@ -142,7 +142,7 @@ gitignored — keep them only on the host.
 docker compose up --build -d
 docker compose logs -f          # watch the first tick: sync → clone → run
 ```
-You should see the first Drive sync, the docs repo clone, and a `== supernote-sync run
+You should see the first Drive sync, the docs repo clone, and a `== NoteSync run
 (backend: claude_code) ==` pass. `restart: unless-stopped` brings it back after reboots.
 
 ## Verify the round trip

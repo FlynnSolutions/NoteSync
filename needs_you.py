@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
 """
-needs_you.py — generate the "Needs You" doc: every open conflict question, ONE PER PAGE, so
-confirmations can be read **deterministically** (no LLM): `format: paged` page-breaks before
-each question, and a page that got ink = that question confirmed (see run._process_needs_you).
-The page→question-id order is written to a sidecar so the read maps ink-on-page-N back to a
-question even if the set changes. Generated entirely from questions.py; source docs are untouched.
+needs_you.py — generate the "Needs You" doc: one card PER PAGE, so it can be read
+**deterministically** (no LLM for the page→item mapping): `format: paged` page-breaks before
+each `##` section. Two kinds of card:
+  - conflict QUESTIONS (questions.py): a page that got ink = that merge confirmed.
+  - parked IDEAS (ideas.py): a captured bigger-picture item to flesh out; write a destination
+    ("priority"/"backlog") and it graduates into the PUNCHLIST.
+The page→item order (and each item's kind) is written to a sidecar so the read maps ink-on-page-N
+back to the right item even as the set changes (see run._process_needs_you). Generated entirely
+from the stores; source docs are untouched.
 """
 from __future__ import annotations
 
 import json
 
 import config
+import ideas
 import questions
 
-ORDER = config.state_dir() / "needs_you_order.json"   # [id, ...] in the order pages are rendered
-_EMPTY = ("---\nformat: notes\n---\n# Needs you\n\n"
-          "Nothing needs you right now — all merges were confident.\n")
+ORDER = config.state_dir() / "needs_you_order.json"   # [{kind, id}, ...] in page order
+_EMPTY = ("---\nformat: notes\n---\n# Needs you\n\n"   # NO device: true ⇒ hidden from the device when empty
+          "Nothing needs you right now — all merges were confident and no ideas are parked.\n")
 
 
-def _page(q: dict) -> str:
-    """One question = one page (format: paged breaks before each `##` section)."""
+def _q_page(q: dict) -> str:
+    """A conflict-question card: tick the box to confirm the merge."""
     return (f"## {q['doc_rel']}  {questions.id_token(q['id'])}\n\n"
             f"Auto-merge wasn't certain. Tick the box to confirm it, or write a correction on "
             f"this doc's own page 1.\n\n"
@@ -27,12 +32,30 @@ def _page(q: dict) -> str:
             f"{questions.CONFIRM_LINE}\n\n")
 
 
+def _idea_page(i: dict) -> str:
+    """A parked-idea card: flesh it out, then write a destination to file it. Any sub-notes
+    captured under the idea are shown so the context isn't lost."""
+    subs = "".join(f"- {s}\n" for s in i.get("subs", []))
+    proj = (i.get("project") or "").rsplit("/", 1)[-1]   # show which project it came from
+    head = f"## Idea — {proj}  {ideas.id_token(i['id'])}" if proj else f"## Idea  {ideas.id_token(i['id'])}"
+    return (f"{head}\n\n"
+            f"**{i['text']}**\n\n"
+            + (subs + "\n" if subs else "")
+            + "Flesh this out below, then write a **destination** (e.g. priority / backlog) to file it "
+            f"into {proj or 'the project'}'s tracker. Leave it blank to keep it here.\n\n"
+            "_Your notes:_\n\n")
+
+
 def build() -> str:
-    """Write the Needs You doc (one question per page, or an 'all clear' if none) and the page→id
-    order sidecar. Byte-stable: only rewrites the file when content changed (no mirror churn)."""
+    """Write the Needs You doc (one card per page) + the page→item order sidecar. Byte-stable:
+    only rewrites the file when content changed (no mirror churn)."""
     open_qs = questions.open_questions()
-    text = ("---\nformat: paged\n---\n" + "".join(_page(q) for q in open_qs)) if open_qs else _EMPTY
-    ORDER.write_text(json.dumps([q["id"] for q in open_qs]), encoding="utf-8")
+    open_ideas = ideas.open_ideas()
+    pages = [_q_page(q) for q in open_qs] + [_idea_page(i) for i in open_ideas]
+    order = ([{"kind": "q", "id": q["id"]} for q in open_qs]
+             + [{"kind": "idea", "id": i["id"]} for i in open_ideas])
+    text = ("---\nformat: paged\ndevice: true\n---\n" + "".join(pages)) if pages else _EMPTY
+    ORDER.write_text(json.dumps(order), encoding="utf-8")
     out = config.needs_you()
     out.parent.mkdir(parents=True, exist_ok=True)
     if not out.exists() or out.read_text(encoding="utf-8") != text:

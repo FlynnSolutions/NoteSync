@@ -1,4 +1,4 @@
-# supernote-sync
+# NoteSync
 
 Edit your Markdown notes by **hand on a Supernote e-ink tablet**, and have the
 changes flow back into the source files automatically — checkboxes ticked, lines
@@ -57,7 +57,7 @@ person and an agent can both read and trust.
 ## Setup
 
 ```bash
-git clone <this-repo> supernote-sync && cd supernote-sync
+git clone <this-repo> NoteSync && cd NoteSync
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 
