@@ -131,7 +131,7 @@ def _claude_digest(instructions: str, context: str) -> str:
         read_ink._load_env()
         if not os.environ.get("ANTHROPIC_API_KEY"):
             raise SystemExit("backend is 'api' but ANTHROPIC_API_KEY not set (env or "
-                             "supernote-sync/.env, or switch to the default claude_code backend)")
+                             "NoteSync/.env, or switch to the default claude_code backend)")
     style = f"Emoji preference: {config.emoji()}."
     user = f"{instructions}\n\n{style}\n\n--- CONTEXT ---\n{context}\n--- END CONTEXT ---\n\nWrite the digest."
     system = [{"type": "text", "text": _SYSTEM}]

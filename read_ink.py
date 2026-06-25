@@ -111,7 +111,7 @@ def main() -> None:
         _load_env()
         if not os.environ.get("ANTHROPIC_API_KEY"):
             sys.exit("backend is 'api' but ANTHROPIC_API_KEY not set (export it, put it in "
-                     "supernote-sync/.env, or switch to the default claude_code backend)")
+                     "NoteSync/.env, or switch to the default claude_code backend)")
 
     rel = args.rel
     if Path(rel).is_absolute() or ".." in Path(rel).parts:

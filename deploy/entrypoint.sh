@@ -47,8 +47,8 @@ fi
 #   GITHUB_TOKEN  — one PAT for every repo (all repos under a single owner).
 #   GITHUB_TOKENS — "owner:token,owner:token" when repos span owners; fine-grained PATs are
 #                   owner-scoped, so each owner needs its own. Matched per-repo by exact path.
-git config --global user.name  "${GIT_USER_NAME:-supernote-sync}"
-git config --global user.email "${GIT_USER_EMAIL:-supernote-sync@localhost}"
+git config --global user.name  "${GIT_USER_NAME:-NoteSync}"
+git config --global user.email "${GIT_USER_EMAIL:-NoteSync@localhost}"
 if [ -n "${GITHUB_TOKENS:-}" ]; then
   git config --global credential.helper store
   git config --global credential.useHttpPath true   # so a per-repo path picks the right token

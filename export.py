@@ -3,7 +3,7 @@
 export.py — render the consolidated TODO markdown checklist into a
 Supernote-Nomad-friendly PDF for hand annotation.
 
-Design goals (see supernote-sync/README.md):
+Design goals (see NoteSync/README.md):
   * Page sized to the Nomad's 3:4 screen so it fills the display without zoom.
   * Large, hand-drawable checkboxes reflecting each item's state.
   * A "STATUS" banner at the top to enforce the check-out / check-in model.

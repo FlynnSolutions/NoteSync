@@ -47,7 +47,7 @@ def _toml_list(items: list[str]) -> str:
 def _write_config(values: dict) -> None:
     roots = _toml_list([r.strip() for r in values["scan_roots"].split(",") if r.strip()])
     CONFIG.write_text(
-        "# supernote-sync config (written by setup.py — edit freely; re-run `sync.sh init`).\n"
+        "# NoteSync config (written by setup.py — edit freely; re-run `sync.sh init`).\n"
         "# Any value can be overridden by a SUPERNOTE_* env var.\n\n"
         f'source_base = "{values["source_base"]}"\n'
         f"scan_roots = {roots}\n"
@@ -63,7 +63,7 @@ def _write_config(values: dict) -> None:
 def main() -> None:
     cur = tomllib.loads(CONFIG.read_text()) if CONFIG.exists() else {}
     prefs = cur.get("preferences", {})
-    print("supernote-sync setup — press Enter to accept each [default].\n")
+    print("NoteSync setup — press Enter to accept each [default].\n")
 
     print("Where things live:")
     values = {

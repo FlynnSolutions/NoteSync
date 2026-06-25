@@ -99,7 +99,7 @@ def read(pages_dir: str) -> None:
 
     read_ink._load_env()
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("ANTHROPIC_API_KEY not set (env or supernote-sync/.env)")
+        raise SystemExit("ANTHROPIC_API_KEY not set (env or NoteSync/.env)")
     import anthropic
 
     pages = sorted(Path(pages_dir).glob("*.png"))

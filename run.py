@@ -217,7 +217,7 @@ def main() -> None:
     ap.add_argument("--no-digest", action="store_true", help="skip the digest step")
     args = ap.parse_args()
 
-    print(f"== supernote-sync run (backend: {config.backend()}) ==")
+    print(f"== NoteSync run (backend: {config.backend()}) ==")
 
     if not args.no_digest:
         print("\n[1/3] digests due today")

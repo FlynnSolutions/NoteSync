@@ -1,4 +1,4 @@
-# Tooling config for supernote-sync. Not a packaged library — this is a CLI tool repo;
+# Tooling config for NoteSync. Not a packaged library — this is a CLI tool repo;
 # install deps from requirements.txt. The lint config below is the project's code standard.
 #
 #   ruff check .        # lint

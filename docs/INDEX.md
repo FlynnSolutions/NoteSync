@@ -1,4 +1,4 @@
-# supernote-sync docs — Index
+# NoteSync docs — Index
 
 The Drive ⇄ Supernote document lifecycle. A **governed consumer** of the shared
 [`DOC_STANDARD`](../../Dagda/doc-standard/DOC_STANDARD.md) — the spec lives canonically in
