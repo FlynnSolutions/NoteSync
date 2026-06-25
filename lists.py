@@ -12,11 +12,13 @@ isn't found — never guesses a location.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import config
 
 _H2 = re.compile(r"^##\s")          # a level-2 heading (NOT ### — that's a subsection)
 _HR = re.compile(r"^---\s*$")
+INBOX = "## 📥 From Supernote"       # the per-project capture sink (created on demand)
 
 
 def _section_bounds(lines: list[str], section: str) -> tuple[int, int] | None:
@@ -57,4 +59,32 @@ def add_item(section: str, text: str, subs: list[str] | None = None) -> bool:
         block = ["", *block]
     lines[insert:insert] = block
     pl.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return True
+
+
+def add_to_inbox(target: Path | None, text: str, subs: list[str] | None = None) -> bool:
+    """Append `- [ ] text` (+ indented subs) to the `## 📥 From Supernote` section of `target`,
+    creating that section at the end of the doc if it's not there yet. Used for per-project capture
+    routing (config.capture_target_for_root). True on success; False if no/absent target."""
+    if target is None or not target.exists():
+        return False
+    text = text.strip()
+    if not text:
+        return False
+    lines = target.read_text(encoding="utf-8").splitlines()
+    block = [f"- [ ] {text}"] + [f"  - {s.strip()}" for s in (subs or []) if s.strip()]
+    bounds = _section_bounds(lines, "From Supernote")
+    if bounds is None:                                    # no inbox yet — start one at the end
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines += [INBOX, "", *block]
+    else:
+        _start, end = bounds
+        insert = end
+        while insert > 0 and not lines[insert - 1].strip():
+            insert -= 1
+        if insert > 0 and lines[insert - 1].strip():
+            block = ["", *block]
+        lines[insert:insert] = block
+    target.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return True

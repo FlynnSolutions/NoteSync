@@ -19,7 +19,7 @@ import ideas
 import questions
 
 ORDER = config.state_dir() / "needs_you_order.json"   # [{kind, id}, ...] in page order
-_EMPTY = ("---\nformat: notes\n---\n# Needs you\n\n"
+_EMPTY = ("---\nformat: notes\n---\n# Needs you\n\n"   # NO device: true ⇒ hidden from the device when empty
           "Nothing needs you right now — all merges were confident and no ideas are parked.\n")
 
 
@@ -36,11 +36,13 @@ def _idea_page(i: dict) -> str:
     """A parked-idea card: flesh it out, then write a destination to file it. Any sub-notes
     captured under the idea are shown so the context isn't lost."""
     subs = "".join(f"- {s}\n" for s in i.get("subs", []))
-    return (f"## Idea  {ideas.id_token(i['id'])}\n\n"
+    proj = (i.get("project") or "").rsplit("/", 1)[-1]   # show which project it came from
+    head = f"## Idea — {proj}  {ideas.id_token(i['id'])}" if proj else f"## Idea  {ideas.id_token(i['id'])}"
+    return (f"{head}\n\n"
             f"**{i['text']}**\n\n"
             + (subs + "\n" if subs else "")
-            + "Flesh this out below, then write **priority** or **backlog** to file it into your "
-            "Punchlist. Leave it blank to keep it here.\n\n"
+            + "Flesh this out below, then write a **destination** (e.g. priority / backlog) to file it "
+            f"into {proj or 'the project'}'s tracker. Leave it blank to keep it here.\n\n"
             "_Your notes:_\n\n")
 
 
@@ -52,7 +54,7 @@ def build() -> str:
     pages = [_q_page(q) for q in open_qs] + [_idea_page(i) for i in open_ideas]
     order = ([{"kind": "q", "id": q["id"]} for q in open_qs]
              + [{"kind": "idea", "id": i["id"]} for i in open_ideas])
-    text = ("---\nformat: paged\n---\n" + "".join(pages)) if pages else _EMPTY
+    text = ("---\nformat: paged\ndevice: true\n---\n" + "".join(pages)) if pages else _EMPTY
     ORDER.write_text(json.dumps(order), encoding="utf-8")
     out = config.needs_you()
     out.parent.mkdir(parents=True, exist_ok=True)

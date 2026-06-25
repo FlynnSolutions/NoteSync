@@ -181,6 +181,7 @@ class DocPDF(FPDF):
         # for anchors that are actually referenced (so link-free docs stay byte-identical).
         self._anchor_links: dict[str, int] = {}
         self._anchor_done: set[str] = set()   # slugs whose destination has been set
+        self._heading_pages: dict[str, int] = {}   # heading slug -> the page it renders on
 
     def footer(self):
         self.set_y(-6)
@@ -265,6 +266,7 @@ def _render_lines(pdf: DocPDF, lines: list[str], usable: float) -> None:
             pdf.ln(2 if lvl <= 2 else 1)
             # if this heading is a referenced anchor, plant the link destination at its top
             s = _slugify(m.group(2))
+            pdf._heading_pages.setdefault(s, pdf.page_no())   # for separate-page TOC filtering
             lid = pdf._anchor_links.get(s)
             if lid is not None and s not in pdf._anchor_done:
                 pdf.set_link(lid, page=pdf.page_no(), y=pdf.get_y())
@@ -514,20 +516,18 @@ def _build(md_text: str, source_label: str = "", doc_format: str = "notes",
     usable = PAGE_W_MM - 2 * MARGIN_MM
     bottom = PAGE_H_MM - BOTTOM_MARGIN_MM
     sections = _split_sections(md_text.splitlines())
-    toc = _toc_entries(md_text)
-    # A clickable contents index only earns its place on a MULTI-PAGE doc with several
-    # headings to jump between — a TOC on a one-page doc is pointless and can't be tested
-    # (its targets are already on screen). Decide by dry-rendering the body and counting
-    # pages. An explicit `toc:` in frontmatter overrides the heuristic.
-    if toc_pref is not None:
-        want_toc = toc_pref
-    elif doc_format == "notes" and len(toc) >= 3:
+    candidates = _toc_entries(md_text)
+    # A TOC entry only earns its place if its heading is on a LATER page than the index — the
+    # device won't jump to an anchor already on the visible page (that was the "dead click"). So
+    # dry-render the body, see which headings land on page 2+, and list only those. No such
+    # headings (a one-page doc) -> no TOC at all. `toc: false` always suppresses.
+    toc = []
+    if toc_pref is not False and candidates:
         scratch = _new_pdf(doc_format)
         scratch.add_page()
         _render_body(scratch, sections, usable, bottom, doc_format)
-        want_toc = scratch.page_no() > 1
-    else:
-        want_toc = False
+        toc = [e for e in candidates if scratch._heading_pages.get(e[2], 1) >= 2]
+    want_toc = len(toc) >= 2          # a 1-jump index isn't worth a "Jump to" block
     _register_anchors(pdf, md_text, toc if want_toc else [])
     if questions:
         pdf.add_page()                       # page 1 = question overlay (source untouched)

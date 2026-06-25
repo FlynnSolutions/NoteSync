@@ -107,32 +107,30 @@ def _process_needs_you(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
 
 
 def _graduate_idea(stem: str, pageno: int, iid: str, idea: dict) -> bool:
-    """Read a fleshed-out idea card; if it names a destination ("priority"/"backlog"), file
-    "<idea> — <elaboration>" (plus the idea's sub-notes) into that PUNCHLIST section and resolve
-    the idea. False (stays parked) when no destination was written or the section wasn't found."""
+    """Read a fleshed-out idea card; if it names a destination (you wrote where it goes), file
+    "<idea> — <elaboration>" (plus its sub-notes) into the `📥 From Supernote` section of the idea's
+    OWN project tracker (idea['project']) and resolve it. False (stays parked) when no destination
+    was written or the project has no configured tracker."""
     full = CHECKIN / f"{stem}-p{pageno}.png"
     ink = CHECKIN / "ink" / f"{stem}-p{pageno}.png"
     out = CHECKIN / f"idea_{iid}.json"
     if _script("read_idea.py", "--full", str(full), "--ink", str(ink), "--out", str(out)) != 0:
         return False
     res = json.loads(out.read_text()) if out.exists() else {}
-    dest = res.get("destination")
-    if dest not in ("priority", "backlog"):
-        return False                                 # no destination -> leave it in Needs You
+    if not res.get("destination"):
+        return False                                 # no destination written -> leave it in Needs You
     elab = (res.get("elaboration") or "").strip()
     idea_text = idea.get("text", "")
     line = f"{idea_text} — {elab}" if (idea_text and elab) else (idea_text or elab)
-    if line and lists.add_item(dest, line, idea.get("subs", [])):
+    target = config.capture_target_for_root(idea.get("project"))
+    if line and lists.add_to_inbox(target, line, idea.get("subs", [])):
         ideas.resolve(iid)
         return True
     return False
 
 
 def _is_capture(rel: str) -> bool:
-    try:
-        return rel == str(config.capture().relative_to(config.source_base()))
-    except ValueError:
-        return False
+    return config.capture_root_for(rel) is not None      # any project's <root>/CAPTURE.md
 
 
 def _process_capture(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
@@ -148,20 +146,23 @@ def _process_capture(pdf: Path, rel: str, mark: Path) -> tuple[str, str]:
     if _script("read_capture.py", "--out", str(items_path)) != 0:
         return (rel, "skipped")
     items = json.loads(items_path.read_text()) if items_path.exists() else []
+    root = config.capture_root_for(rel)        # which project this page belongs to
+    target = config.capture_target_for_root(root)
+    project = Path(rel).parent.name
     todos = ideas_n = 0
     for it in items:
         text = (it.get("text") or "").strip()
         if not text:
             continue
         subs = it.get("subs") or []            # indented sub-notes ride with their parent item
-        if it.get("kind") == "todo" and lists.add_item("Priority", text, subs):
+        if it.get("kind") == "todo" and lists.add_to_inbox(target, text, subs):
             todos += 1
         else:                                  # idea, or an unplaceable todo -> Needs You (never lost)
-            ideas.add(text, subs)
+            ideas.add(text, subs, project=root)
             ideas_n += 1
-    capture.reset()                            # blank the page; next mirror re-renders it empty
+    capture.reset(config.source_base() / rel)  # blank THIS page; next mirror re-renders it empty
     reconcile._consume_marks(rel)              # record the ink read + consume its export
-    return (rel, f"capture: {todos} todo(s) -> Priority, {ideas_n} idea(s) -> Needs You")
+    return (rel, f"capture[{project}]: {todos} todo(s) -> tracker, {ideas_n} idea(s) -> Needs You")
 
 
 def _process_one(pdf: Path) -> tuple[str, str]:

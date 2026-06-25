@@ -2,36 +2,42 @@
 """
 capture.py — the blank "Capture" page: an open surface you hand-write ideas & todos on.
 
-Unlike a normal doc, the markdown SOURCE stays a fixed blank template — your writing lives in
-the device ink layer. On check-in the ink is read and ROUTED out (clear todos -> PUNCHLIST,
-bigger ideas -> Needs You to flesh out), then the page is reset to blank so nothing accumulates
-(see run._process_capture — routing is brick 2/3). This module only owns the template: ensure it
-exists for mirroring, and reset it after a routing pass. Byte-stable, like needs_you.build().
+One per project (config.capture_pages() → `<scan_root>/CAPTURE.md`), so notes you jot stay scoped
+to that project. Unlike a normal doc, the markdown SOURCE stays a fixed blank template — your
+writing lives in the device ink layer. On check-in the ink is read and ROUTED out (clear todos ->
+that project's tracker, bigger ideas -> the global Needs You to flesh out), then the page is reset
+to blank so nothing accumulates (see run._process_capture). This module owns only the template:
+ensure the pages exist for mirroring, and reset one after a routing pass. Byte-stable.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import config
 
-TEMPLATE = (
-    "---\nformat: notes\n---\n# Capture\n\n"
-    "Jot ideas & todos below. On the next sync, clear to-dos go to your PUNCHLIST and bigger "
-    "ideas that need fleshing out go to NEEDS YOU. This page clears itself after each sync.\n"
-)
+
+def _template(project: str) -> str:
+    return (
+        f"---\nformat: notes\ndevice: true\n---\n# Capture — {project}\n\n"
+        f"Jot {project} ideas & todos below. On the next sync, clear to-dos go to this project's "
+        f"tracker and bigger ideas go to NEEDS YOU to flesh out. This page clears itself after "
+        f"each sync.\n"
+    )
 
 
 def ensure() -> None:
-    """Create the capture page if missing (idempotent; only writes when content differs)."""
-    out = config.capture()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    if not out.exists() or out.read_text(encoding="utf-8") != TEMPLATE:
-        out.write_text(TEMPLATE, encoding="utf-8")
+    """Create each project's capture page if missing (idempotent; only writes when content differs)."""
+    for p in config.capture_pages():
+        text = _template(p.parent.name)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if not p.exists() or p.read_text(encoding="utf-8") != text:
+            p.write_text(text, encoding="utf-8")
 
 
-def reset() -> None:
-    """Blank the capture page after its items have been routed out."""
-    out = config.capture()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(TEMPLATE, encoding="utf-8")
+def reset(path: Path) -> None:
+    """Blank one capture page after its items have been routed out."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_template(path.parent.name), encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -55,6 +55,16 @@ def source_path(rel: str) -> Path:
     return config.source_base() / rel
 
 
+def _device_pdf(rel: str) -> Path:
+    """The device PDF path for a source_rel — read from the manifest, since pinned mode may
+    FLATTEN it (Projects/<area>/<doc>) rather than mirror the source path. Fallback: source+.pdf."""
+    if MANIFEST.exists():
+        for e in json.loads(MANIFEST.read_text()):
+            if e["source_rel"] == rel:
+                return Path(e["pdf"])
+    return Path(rel).with_suffix(".pdf")
+
+
 def three_way(current: Path, base: Path, other: Path) -> tuple[str, int]:
     """Return (merged_text, conflict_count). conflict_count 0 = clean."""
     res = subprocess.run(
@@ -76,7 +86,7 @@ def _consume_marks(rel: str) -> None:
     library, export_dir = config.library(), config.export_dir()
     if library is None or export_dir is None:
         return
-    pdf_rel = Path(rel).with_suffix(".pdf")
+    pdf_rel = _device_pdf(rel)                       # manifest-derived (may be flattened in pinned mode)
     mark = config.mark_for(library / pdf_rel)
     export = export_dir / pdf_rel.name
     if mark.exists():

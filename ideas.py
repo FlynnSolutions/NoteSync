@@ -38,13 +38,15 @@ def _save(items: list[dict]) -> None:
     STORE.write_text(json.dumps(items, indent=2), encoding="utf-8")
 
 
-def add(text: str, subs: list[str] | None = None) -> str:
-    """Park a captured idea (with any indented sub-notes) for elaboration. Returns its id."""
+def add(text: str, subs: list[str] | None = None, project: str | None = None) -> str:
+    """Park a captured idea (with any indented sub-notes) for elaboration. `project` is the scan_root
+    it came from, so it graduates back to that project's tracker (run._graduate_idea). Returns its id."""
     text = text.strip()
     iid = hashlib.sha256(f"{text}\0{time.time()}".encode()).hexdigest()[:12]
     items = _load()
     items.append({"id": iid, "text": text,
                   "subs": [s.strip() for s in (subs or []) if s.strip()],
+                  "project": project,
                   "status": "open", "created": time.strftime("%Y-%m-%dT%H:%M:%S")})
     _save(items)
     return iid
