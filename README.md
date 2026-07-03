@@ -19,6 +19,11 @@ git commit.
                 (auto-commit, revertible)
 ```
 
+<!-- DEMO: record the round-trip and save it as docs/media/round-trip.gif, then uncomment:
+![NoteSync round-trip — annotate on the tablet, strokes merge back into the source](docs/media/round-trip.gif)
+*Annotate a doc by hand on the Supernote → strokes read from the `.mark` layer → merged back into the source Markdown.*
+-->
+
 ## The bigger picture
 
 This tool is one piece of a larger idea: a **knowledge architecture for human +
