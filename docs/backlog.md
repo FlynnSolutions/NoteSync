@@ -56,7 +56,7 @@ How to name the new file. Depends on solving `.note`/cloud-fetch retrieval.
 
 ## Interactive onboarding + preferences (config wizard)
 
-**Status (2026-06-02): mostly BUILT.** `./sync.sh init` (`setup.py`) collects paths +
+**Status (2026-06-02): mostly BUILT.** `./sync.sh init` (`onboard.py`) collects paths +
 preferences and writes `config.toml`/`.env` — done. Preferences wired: `density` →
 render line-spacing, `emoji` → read_ink prompt (`config.emoji/density`). Calibration:
 `./sync.sh calibrate` generates the scribble sheet (`calibrate.py` — verified). The

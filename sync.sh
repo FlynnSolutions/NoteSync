@@ -33,7 +33,7 @@ cmd="${1:-help}"
 case "$cmd" in
   init)
     # Interactive first-run setup: writes config.toml + .env. Re-runnable to update.
-    "$PY" "$HERE/setup.py"
+    "$PY" "$HERE/onboard.py"
     ;;
 
   out)

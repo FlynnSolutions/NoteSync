@@ -1,9 +1,58 @@
-# Tooling config for NoteSync. Not a packaged library — this is a CLI tool repo;
-# install deps from requirements.txt. The lint config below is the project's code standard.
+# NoteSync — project + tooling config.
 #
-#   ruff check .        # lint
-#   ruff format --diff  # (optional) formatting preview — we keep compact data literals,
-#                       # so format is advisory, not enforced.
+# Install (editable, into a dedicated venv — the supported path):
+#   python3 -m venv .venv && . .venv/bin/activate
+#   pip install -e .            # deps + the `notesync` command (wraps ./sync.sh)
+#
+# Lint (the project's code standard):
+#   ruff check .
+#   ruff format --diff          # advisory only — we keep compact data literals
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notesync"
+version = "0.1.0"
+description = "Hand-annotate Markdown notes on a Supernote e-ink tablet; Claude reads the ink from the .mark layer and 3-way-merges edits back into source."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Flynn Solutions LLC" }]
+keywords = ["supernote", "e-ink", "markdown", "claude", "handwriting", "note-taking", "ocr"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Topic :: Office/Business",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+    "anthropic>=0.104",   # read_ink.py — reads handwriting via Claude vision (api backend)
+    "fpdf2>=2.8",         # render.py / export.py — markdown -> PDF
+    "Pillow>=10",         # marklayer.py — composite ink over page images
+    "supernotelib>=0.7",  # provides the `supernote-tool` CLI (.note/.mark -> PNG)
+]
+
+[project.urls]
+Homepage = "https://github.com/FlynnSolutions/NoteSync"
+Repository = "https://github.com/FlynnSolutions/NoteSync"
+
+[project.scripts]
+notesync = "cli:main"
+
+# Flat module layout (scripts orchestrated by sync.sh; the `notesync` command wraps it).
+# Editable install links these from the checkout, so sync.sh + fonts sit alongside them.
+# NOTE: a wheel/PyPI build would want a `src/notesync/` package (namespaced imports) — the
+# generic top-level names here are fine in a dedicated venv but pollute a shared one.
+[tool.setuptools]
+py-modules = [
+    "apply", "backend", "calibrate", "capture", "checkin", "cli", "common", "config",
+    "derive", "digest", "doc_lines", "export", "heartbeat", "ideas", "lists", "marklayer",
+    "marks", "mirror", "needs_you", "onboard", "pending", "questions", "read_capture",
+    "read_idea", "read_ink", "read_marks", "reconcile", "render", "repos", "route", "run",
+    "synthesize", "vcs", "watch",
+]
 
 [tool.ruff]
 line-length = 120

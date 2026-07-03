@@ -7,7 +7,7 @@ simple and sharp are very welcome.
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .                      # runtime deps + the `notesync` command (wraps ./sync.sh)
 pip install -r requirements-dev.txt   # ruff (see Code standards)
 cp config.example.toml config.toml   # your local settings (gitignored)
 cp .env.example .env                 # your Anthropic key (gitignored)

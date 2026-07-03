@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-setup.py — interactive onboarding. Walks through config.toml + preferences with sensible
+onboard.py — interactive onboarding. Walks through config.toml + preferences with sensible
 defaults and writes them, so a new user doesn't have to hand-edit TOML. Re-runnable to
 update (it pre-fills the current values). Non-interactive use still works: hand-edit
 config.toml, or set SUPERNOTE_* env vars (config.py's resolution order is unchanged).
 
-    python setup.py        # or: ./sync.sh init
+    python onboard.py      # or: ./sync.sh init
 
 Accepting every default (just pressing Enter) yields a working local config.
 """
@@ -47,7 +47,7 @@ def _toml_list(items: list[str]) -> str:
 def _write_config(values: dict) -> None:
     roots = _toml_list([r.strip() for r in values["scan_roots"].split(",") if r.strip()])
     CONFIG.write_text(
-        "# NoteSync config (written by setup.py — edit freely; re-run `sync.sh init`).\n"
+        "# NoteSync config (written by onboard.py — edit freely; re-run `sync.sh init`).\n"
         "# Any value can be overridden by a SUPERNOTE_* env var.\n\n"
         f'source_base = "{values["source_base"]}"\n'
         f"scan_roots = {roots}\n"
