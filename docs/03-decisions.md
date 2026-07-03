@@ -30,21 +30,28 @@ refresh, not a full pass — and the per-edit `watch.py` mirror is left prune-fr
 often; the heartbeat covers cleanup). Verified live: a `MyProject → my-project` scan-root rename
 migrated the device tree (new rendered, old pruned) with no stranded files.
 
-### ADR-017 — `@claude` instruction marks are repo-aware; plain marks stay single-doc
+### ADR-017 — instruction marks are repo-aware  *(superseded 2026-07: now EVERY mark)*
+
+> **Superseded — every mark is now an instruction, and repo-awareness applies to all of them.**
+> The `@claude` tag is no longer required (or needed): the ink reader treats every mark as a
+> command whose *intent* is carried out (never transcribed literally) and rebuilds the sections it
+> touches, and the read-only repo-awareness below now applies to **any** note, not just tagged
+> ones. See `read_marks.py` (rule 4), `read_ink.py`, and the README. The original decision stands
+> below as history; the mechanism (repo-root in the prompt, `claude_code` agent reads by absolute
+> path, `api` backend can't) is unchanged — only the *gating* was removed.
+
 A plain mark is applied to the one document, faithfully (ADR-010 — apply what's written, don't
-editorialize). But an `@claude …` instruction often depends on the rest of the project
-("reconcile with the punchlist", "match the new schema"). Decision: when the model carries out an
-`@claude` mark it **may read other files in that doc's repository for context** — passed the repo
-root in the prompt; the `claude_code` backend is Claude Code (an agent with a Read tool) and reads
-by absolute path, so **no cwd change or extra plumbing was needed** (verified: it reads files
-outside its working dir). Scope is deliberately narrow: **read-only context, and only for `@claude`
-marks** — literal marks stay single-doc and faithful (feeding them the whole repo would invite
-over-editing). The agent never modifies other files; its only output is the edited markdown, and
-the source change still flows through `reconcile` + a revertible commit (ADR-001). On the `api`
-backend (no agent) the read can't happen, so repo-awareness is claude_code-only. This keeps docs
-**coupled to their projects** (no decoupled notes repo) and is the foundation for "scribble a task
-on the device → run it in the project." Verified live: an `@claude` instruction read a sibling
-file in the repo and incorporated it into the edit.
+editorialize). But an instruction often depends on the rest of the project
+("reconcile with the punchlist", "match the new schema"). Decision _(as originally scoped to
+`@claude` marks)_: when the model carries out such a mark it **may read other files in that doc's
+repository for context** — passed the repo root in the prompt; the `claude_code` backend is Claude
+Code (an agent with a Read tool) and reads by absolute path, so **no cwd change or extra plumbing
+was needed** (verified: it reads files outside its working dir). The agent never modifies other
+files; its only output is the edited markdown, and the source change still flows through
+`reconcile` + a revertible commit (ADR-001). On the `api` backend (no agent) the read can't happen,
+so repo-awareness is claude_code-only. This keeps docs **coupled to their projects** (no decoupled
+notes repo) and is the foundation for "scribble a task on the device → run it in the project."
+Verified live: an instruction mark read a sibling file in the repo and incorporated it into the edit.
 
 ### ADR-016 — Cloud Drive access via `rclone copy`, not a FUSE mount  *(unprivileged container)*
 The container reaches Google Drive by **syncing** the Supernote folder to a local working copy
@@ -185,7 +192,7 @@ edits to the source, which re-renders. Makes the round-trip safe and versionable
 Original approach: user annotates in **red**, and red pixels are isolated from the
 printed page as ground truth (naked-eye reading of the full page conflated ink with
 printed glyphs). Superseded by reading the `.mark` layer directly, which is colour-
-independent. `@claude` prefix still marks instructions.
+independent. (Every mark is now read as an instruction — see ADR-017.)
 
 ### ADR-003 — Google Drive as the hub (bidirectional)
 The Nomad auto-mirrors its tree to `My Drive/Supernote/` and the sync is
