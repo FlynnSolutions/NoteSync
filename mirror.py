@@ -104,8 +104,10 @@ def _device_rel(src: Path, rel: Path) -> Path:
         return rel.with_suffix(".pdf")   # keep the full path (Self-Help / Expeditions don't collide)
     if parts and parts[0] == "Projects" and len(parts) >= 2:
         area = parts[1]
+    elif parts:
+        area = parts[0]
     else:
-        area = parts[0] if parts else "misc"
+        area = "misc"
     return Path(area) / (rel.stem + ".pdf")
 
 
