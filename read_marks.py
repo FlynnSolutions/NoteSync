@@ -76,8 +76,11 @@ HARD RULES:
      spans; quote the first and last.
    - "leader": a line WITH an arrowhead — targets the ONE thing at the arrowhead, which may be
      a doc line OR another of the person's notes (they chain marks). Say which.
-4. "@claude" (a circled-a) marks a COMMAND to the assistant; set "command": true. A directive
-   phrase without @claude ("Fix this") is still an edit but command=false.
+4. Treat EVERY note as if it were prefixed with "@claude" — always a COMMAND to the assistant:
+   set "command": true for all notes. Carry out what each note INTENDS rather than transcribing
+   the literal ink as document text (a check = "mark this done", a strike = "remove this", a
+   margin phrase = "make this change", a directive = "do this"). The "@claude" tag is no longer
+   needed and need not be written — an untagged note is just as much a command as a tagged one.
 5. Use the handwriting profile for ambiguous letters.
 
 Output ONLY a JSON object (no prose, no code fences):

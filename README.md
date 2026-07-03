@@ -131,21 +131,22 @@ Pruning is **on** for `./sync.sh mirror` and the unattended heartbeat (`run.py`)
 for a bare `python mirror.py` (safe to run anywhere). Deletions go to the Drive mount
 (recoverable from Drive trash ~30 days). Preview anytime with `./sync.sh mirror --dry-run`.
 
-### Marks vs. `@claude` instructions
+### Every note is an instruction
 
-How you annotate decides how the edit is applied:
+You don't tag anything. Claude treats **every mark as if it were prefixed with `@claude`**: it
+carries out what the note *intends* rather than transcribing your words into the page, and it
+rebuilds the sections you touch so the doc comes back finished, not annotated. It reads the rest
+of the repo for context whenever a note needs it, and leaves sections you didn't touch (and
+derived counts) alone.
 
-- **A plain mark** — a check, a strike, a margin note, lines written in a blank area — is
-  applied **literally, to that one document**: exactly what you wrote, with no awareness of the
-  rest of the repo. This is the safe default and keeps edits faithful.
-- **Prefix a note with `@claude`** — e.g. `@claude reconcile this with the punchlist`, or
-  `@claude update this section to match the new schema` — and Claude **carries the instruction
-  out with awareness of the whole repository the doc lives in**: it reads the relevant files in
-  that repo for context, then applies the edit. **Use `@claude` whenever the change depends on
-  information elsewhere in the project, not just this page.**
+- A **check / strike / status marker** → done / remove, applied as-is.
+- A **margin note or directive** ("tighten this", "reconcile with the punchlist", "these are the
+  decisions") → carried out, with whole-repo awareness when the change depends on information
+  beyond this page.
+- **New lines in a blank area** → folded in as new content.
 
-(The `@claude` text is treated as an instruction, not transcribed into the doc; case doesn't
-matter. Repo-awareness uses the `claude_code` backend — the default.)
+(`@claude` is still honored as optional emphasis but is no longer needed. Repo-awareness uses the
+`claude_code` backend — the default.)
 
 ## Document formatting
 

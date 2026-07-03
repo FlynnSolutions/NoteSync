@@ -58,13 +58,16 @@ Rules:
 - Only act on the handwritten ink. The printed text is the existing document, not an \
 edit. In the full page, the ink is the marks drawn ON TOP of the printed document; \
 the ink-only image shows exactly those marks with nothing else.
-- Apply each mark faithfully: a check/strike means done/remove per context; a margin \
-note is an edit or comment on that line; new lines written in a blank/INBOX area are \
-new content.
-- An "@claude ..." mark is a COMMAND to carry out, not content. Make the edit it \
-describes, but do NOT transcribe the literal "@claude ..." text into the document — \
-it is an instruction to you. If it was written into a prompt/placeholder area (e.g. \
-a "(write here)" line), leave that placeholder unchanged; don't fill it with the command.
+- Treat EVERY mark as if it were prefixed with "@claude" — always a COMMAND to carry out, \
+never content to transcribe. Do what each mark INTENDS: a check/strike means done/remove per \
+context; a margin phrase means "make this change"; a directive means "do this"; new lines in a \
+blank/INBOX area are new content to fold in. Do NOT transcribe the literal instruction text (or \
+any "@claude" prefix) into the document, and if a mark sits in a prompt/placeholder area (e.g. a \
+"(write here)" line), carry out its intent — don't leave the raw words as the answer.
+- Treat the person's notes as authorial INTENT: rebuild and rewrite the sections they touch so \
+the document reads as one coherent piece authored WITH those notes in mind — not a clean draft \
+with handwriting spliced in beside it. A worksheet answered in the margins should come back as a \
+finished document, not an annotated form.
 - Use the handwriting quirks profile to resolve ambiguous letters.
 - When a mark points at, brackets, circles, or underlines specific content, identify \
 EXACTLY what it targets — report that literally. Do not substitute the nearest \
@@ -76,7 +79,9 @@ line). Do NOT hand-update summary/aggregate counts — a "Quick stats" block, or
 like "Items shipped (`[x]`): N" / "Total items: N". Those are recomputed from the \
 document automatically after your edit; if you change them you'll just fight the merge. \
 Change what the ink targets and leave the tallies alone.
-- Preserve everything in the source that wasn't annotated, byte-for-byte where possible.
+- Preserve sections the notes don't touch, and NEVER drop information the person didn't ask to \
+remove — but you MAY freely restructure and rewrite the sections the notes DO touch so the result \
+is coherent (this is a rebuild, not a byte-for-byte splice).
 - If a mark is genuinely illegible, leave that part of the source unchanged and add an \
 HTML comment <!-- read_ink: unsure about "<your best guess>" --> next to it.
 
@@ -164,20 +169,19 @@ def main() -> None:
             "page-1 question text (or its checkbox/prompt lines) into the output. Pages 2+ are "
             "the real document — annotate them normally.\nOpen question(s):\n" + qlist})
 
-    # Repo awareness for `@claude` instruction marks: tell the agent where this doc's repo is so
-    # it can read relevant files to carry the instruction out in context. Only on the claude_code
-    # backend (the api backend can't read files), and only `@claude` marks use it — literal marks
-    # stay faithful to this doc alone.
+    # Repo awareness: every mark is now an instruction (treated as `@claude`), so tell the agent
+    # where this doc's repo is and let it read relevant files to carry any note out in context.
+    # Only on the claude_code backend (the api backend can't read files).
     repo = vcs.repo_root(config.source_base() / rel)
     if config.backend() == "claude_code" and repo is not None:
         system.insert(1, {"type": "text", "text":
             "REPO AWARENESS: this document lives in the repository rooted at:\n"
             f"  {repo}\n"
-            "For an `@claude ...` instruction mark ONLY, you MAY use the Read tool on other files "
-            "in that repository (by absolute path under that root) to carry the instruction out "
-            "accurately and consistently with the rest of the project. Do NOT range across the "
-            "repo for literal marks (checks, strikes, notes, new lines) — apply those from this "
-            "document alone. Never modify any other file; your only output is this document's "
+            "To carry out any note accurately and consistently with the rest of the project, you "
+            "MAY use the Read tool on other files in that repository (by absolute path under that "
+            "root) — pull in context whenever a note's intent depends on information beyond this "
+            "page. For a purely local mark (a check, a strike, a verbatim new line) you don't need "
+            "to; just apply it. Never modify any other file; your only output is this document's "
             "edited markdown."})
 
     edited = backend.read(system, content).strip()

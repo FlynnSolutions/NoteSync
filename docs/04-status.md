@@ -1,6 +1,6 @@
 # 04 — Status  `[claude]`
 
-_Last updated: 2026-06-08_
+_Last updated: 2026-07-03_
 
 ## Built & working
 
@@ -59,6 +59,23 @@ punchlist addition") were routed to `RealtimeMFG/deliverables/PUNCHLIST.md` (a `
 inbox section, for triage). This was the first full structured-pipeline round-trip taken all the
 way to source — it validated the read→synthesize→apply→reconcile chain end-to-end.
 
+### Every note is a command; Needs You is cross-project (2026-07-03)
+
+- **Dropped the `@claude` requirement.** Ink reading now treats **every** mark as an instruction
+  whose *intent* is carried out (never transcribed literally), and **rebuilds the sections a note
+  touches** rather than splicing raw words beside the printed text. Repo-awareness (reading other
+  repo files for context) — previously gated to `@claude` marks — now applies to any note. Changed
+  in `read_marks.py` (rule 4) and `read_ink.py` (apply prompt + repo-awareness); documented in
+  `README.md`, `docs/05-conventions.md`, `CLAUDE.md`. Guardrails kept: untouched sections preserved,
+  nothing dropped, derived counts still owned by `derive.py`.
+- **Round-trip process codified** in `CLAUDE.md` ("When the user syncs marks"): act on marks in the
+  docs, respond in the Needs You doc (not chat), always consume marks.
+- **Needs You relocated to the hq hub.** The generated dashboard pools ideas/questions from every
+  project but defaulted under `scan_roots[0]` (Realtime), so it looked Realtime-owned. Now
+  `needs_you = "Projects/hq/NEEDS-YOU.md"` (config) — a neutral cross-project home.
+- **Letterhead render** confirmed working end-to-end (a `renderer: letterhead` doc rendered branded
+  via the external Node builder; verified by the PDF's HeadlessChrome producer).
+
 ## Roadmap
 
 1. ✅ **General renderer** (`render.py`) — any markdown → clean annotatable PDF
@@ -105,6 +122,11 @@ way to source — it validated the read→synthesize→apply→reconcile chain e
   the ledger with DynamoDB/S3.) Remaining: adding strokes to an already-read doc without
   clearing on-device reprocesses the *cumulative* ink — true incremental-ink diffing is
   a separate, larger problem.
+  - ⚠️ **Observed 2026-07-03:** Drive can re-touch a `.mark` (rewrite the file bytes with
+    identical strokes) → new raw-bytes hash → an already-read doc resurfaces as pending and
+    mirror re-PROTECTs it. Confirmed on `Realtime/CAPTURE` (same ink, re-consumed by hand). The
+    prescribed fix (`marks.py:18-20`): hash the **extracted ink** instead of the raw file bytes,
+    so a metadata-only re-touch stays "read." Not yet implemented.
 - Native `.note` files don't sync to Drive (handwritten notebooks stay device +
   Supernote Cloud only).
 - Google Docs take interpreted-instruction edits, not literal positional ink (and
