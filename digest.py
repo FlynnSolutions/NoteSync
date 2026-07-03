@@ -9,9 +9,9 @@ instructions to Claude. Example (see examples/digests/):
 
     ---
     days: mon-fri                       # daily | mon-fri | mon,wed,fri | mon
-    sources: [RealtimeMFG/claude]       # folders whose recent activity to summarize
-    review: [RealtimeMFG/deliverables/PUNCHLIST.md]   # docs to read in full + review
-    out: RealtimeMFG/digests            # where the digest lands (under source_base)
+    sources: [MyProject/claude]       # folders whose recent activity to summarize
+    review: [MyProject/deliverables/PUNCHLIST.md]   # docs to read in full + review
+    out: MyProject/digests            # where the digest lands (under source_base)
     ---
     Summarize what changed, then review my punch-list and flag anything actionable.
 

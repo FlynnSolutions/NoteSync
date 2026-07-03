@@ -50,7 +50,9 @@ person and an agent can both read and trust.
 
 - **Python 3.11+** (uses `tomllib`)
 - **poppler** — provides `pdftoppm` (`brew install poppler` / `apt install poppler-utils`)
-- **An Anthropic API key** — for the handwriting read (`ANTHROPIC_API_KEY`)
+- **Claude access for the handwriting read** — by **default your Claude subscription** via the
+  `claude` CLI (`claude -p`; no API key, no metered tokens). Or switch to the Anthropic API
+  backend (`backend = "api"` in config) with an `ANTHROPIC_API_KEY`.
 - **A Supernote tablet** synced to a cloud folder your computer can see (the reference
   setup is Google Drive for Desktop; any path works via config)
 
@@ -64,8 +66,9 @@ pip install -r requirements.txt
 # Config: copy the example and edit it (config.toml is gitignored).
 cp config.example.toml config.toml      # set source_base, scan_roots, supernote_root
 
-# API key:
-cp .env.example .env                     # paste your Anthropic key
+# Handwriting reader: your Claude subscription (the `claude` CLI) is the default — no key.
+# Only if you set backend = "api" in config.toml, add your Anthropic key:
+cp .env.example .env                     # ANTHROPIC_API_KEY (api backend only)
 
 # Put your notes under version control so every auto-edit is revertible:
 git -C "$(python config.py source_base)" init   # if not already a repo

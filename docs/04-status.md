@@ -50,14 +50,13 @@ Recognition itself is strong across dense pages.
 
 ### DOCS_AUDIT round-trip — MERGED (2026-06-08)
 
-`RealtimeMFG/Docs/DOCS_AUDIT.md` (the docs-accuracy audit) was fully **read → synthesized →
-applied → 3-way merged into the source** (63 notes placed; ① "Yup this should be fixed" →
-sub-items and ② "Both these last two" → prod-items both verified). The merge was CLEAN, applied to
-the source, committed in the docs repo (revertible), the device `.mark` marked read (kept on
-Drive), and the tree re-mirrored. The 2 action-notes (billing/early-adopter mindset; "make this a
-punchlist addition") were routed to `RealtimeMFG/deliverables/PUNCHLIST.md` (a `📥 From Supernote`
-inbox section, for triage). This was the first full structured-pipeline round-trip taken all the
-way to source — it validated the read→synthesize→apply→reconcile chain end-to-end.
+A large real-world audit doc (**63 handwritten notes** across many pages, including doc-wide
+instruction marks) was fully **read → synthesized → applied → 3-way merged into the source**.
+The merge was CLEAN, applied to the source, committed in the docs repo (revertible), the device
+`.mark` marked read (kept on Drive), and the tree re-mirrored. Action-notes that weren't document
+edits (e.g. "make this a punchlist addition") were routed to a personal `PUNCHLIST.md` inbox
+section for triage. This was the first full structured-pipeline round-trip taken all the way to
+source — it validated the read→synthesize→apply→reconcile chain end-to-end.
 
 ### Every note is a command; Needs You is cross-project (2026-07-03)
 

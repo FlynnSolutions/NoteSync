@@ -27,7 +27,7 @@ hard invariant in every mode. Deletions land on the Drive mount (recoverable fro
 the *aborting* default, so the automated path can never delete around un-applied handwriting. The
 mid-reconcile overlay re-mirror (`run.py drain()`) stays prune-free — it's a targeted page-1
 refresh, not a full pass — and the per-edit `watch.py` mirror is left prune-free for now (it fires
-often; the heartbeat covers cleanup). Verified live: a `RealtimeMFG → Realtime` scan-root rename
+often; the heartbeat covers cleanup). Verified live: a `MyProject → my-project` scan-root rename
 migrated the device tree (new rendered, old pruned) with no stranded files.
 
 ### ADR-017 — `@claude` instruction marks are repo-aware; plain marks stay single-doc

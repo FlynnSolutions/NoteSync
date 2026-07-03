@@ -94,7 +94,7 @@ of them to the host.
    This writes `~/.config/rclone/rclone.conf`. You'll copy that file to the host.
 
 3. **Your notes repos** — your source `.md` docs, **one private git repo per scan_root** (e.g.
-   `RealtimeMFG`, `hq`). Run **`./sync.sh repos`** — it surveys your scan_roots, tells you which
+   `MyProject`, `hq`). Run **`./sync.sh repos`** — it surveys your scan_roots, tells you which
    still need a remote (with the exact `gh repo create … --push` command for each), and once
    they're all on remotes, **prints the exact `DOCS_REPOS=` line to paste into `loop.env`**
    (re-run it anytime you add a project — the list maintains itself, and it flags any repo with
