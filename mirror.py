@@ -91,17 +91,19 @@ def _device_placement(p: Path) -> str | None:
 def _device_rel(src: Path, rel: Path) -> Path:
     """The doc's path ON THE DEVICE. In pinned (curated) mode, FLATTEN: `device: root` →
     Document/<doc> (top level, e.g. START-HERE); `device: true` → `<area>/<doc>` (one level deep).
-    Full-mirror mode preserves the source path (flattening would collide like-named files). The
-    manifest keeps the real source_rel, so the round-trip is unaffected."""
+    EXCEPTION: `Personal/*` keeps its FULL path (Personal has several sub-areas — Self-Help,
+    Expeditions — whose like-named docs like CHECKLIST.md would collide if flattened to `Personal/`).
+    Full-mirror mode preserves the source path. The manifest keeps the real source_rel, so the
+    round-trip is unaffected."""
     if not PINNED:
         return rel.with_suffix(".pdf")
     if _device_placement(src) == "root":
         return Path(rel.stem + ".pdf")
     parts = rel.parts
+    if parts and parts[0] == "Personal":
+        return rel.with_suffix(".pdf")   # keep the full path (Self-Help / Expeditions don't collide)
     if parts and parts[0] == "Projects" and len(parts) >= 2:
         area = parts[1]
-    elif parts and parts[0] == "Personal":
-        area = "Personal"
     else:
         area = parts[0] if parts else "misc"
     return Path(area) / (rel.stem + ".pdf")
