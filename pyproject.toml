@@ -2,7 +2,7 @@
 #
 # Install (editable, into a dedicated venv — the supported path):
 #   python3 -m venv .venv && . .venv/bin/activate
-#   pip install -e .            # deps + the `notesync` command (wraps ./sync.sh)
+#   pip install -e .            # deps + modules + the `notesync` command
 #
 # Lint (the project's code standard):
 #   ruff check .
@@ -39,20 +39,16 @@ Homepage = "https://github.com/FlynnSolutions/NoteSync"
 Repository = "https://github.com/FlynnSolutions/NoteSync"
 
 [project.scripts]
-notesync = "cli:main"
+notesync = "notesync.cli:main"
 
-# Flat module layout (scripts orchestrated by sync.sh; the `notesync` command wraps it).
-# Editable install links these from the checkout, so sync.sh + fonts sit alongside them.
-# NOTE: a wheel/PyPI build would want a `src/notesync/` package (namespaced imports) — the
-# generic top-level names here are fine in a dedicated venv but pollute a shared one.
-[tool.setuptools]
-py-modules = [
-    "apply", "backend", "calibrate", "capture", "checkin", "cli", "common", "config",
-    "derive", "digest", "doc_lines", "export", "heartbeat", "ideas", "lists", "marklayer",
-    "marks", "mirror", "needs_you", "onboard", "pending", "questions", "read_capture",
-    "read_idea", "read_ink", "read_marks", "reconcile", "render", "repos", "route", "run",
-    "synthesize", "vcs", "watch",
-]
+# src/ layout: the package is `notesync` (namespaced imports, no top-level pollution). Runtime
+# state (base/, device/, manifest.json, ledger, ...) lives in the user data dir, never the package
+# — see config.data_dir(). Fonts ship as package data.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+notesync = ["assets/fonts/*.ttf", "assets/fonts/*.txt"]
 
 [tool.ruff]
 line-length = 120

@@ -26,14 +26,14 @@ PY="$HERE/.venv/bin/python"
 # Google Drive for Desktop mount). The device mirrors its folder tree to a Supernote/
 # folder in Drive; the sync is BIDIRECTIONAL (writing Document/ pushes to the device,
 # the device writes annotated exports to EXPORT/). Resolved lazily, per command.
-cfg() { "$PY" "$HERE/config.py" "$1"; }
+cfg() { "$PY" -m notesync.config "$1"; }
 
 cmd="${1:-help}"
 
 case "$cmd" in
   init)
     # Interactive first-run setup: writes config.toml + .env. Re-runnable to update.
-    "$PY" "$HERE/onboard.py"
+    "$PY" -m notesync.onboard
     ;;
 
   out)
@@ -42,7 +42,7 @@ case "$cmd" in
     base="$(basename "$CHECKLIST" .md)"
     PDF_OUT="$HERE/out/$base.pdf"
     mkdir -p "$HERE/out"
-    "$PY" "$HERE/export.py" "$CHECKLIST" "$PDF_OUT" --status "on-device since $(date +%Y-%m-%d\ %H:%M)"
+    "$PY" -m notesync.export "$CHECKLIST" "$PDF_OUT" --status "on-device since $(date +%Y-%m-%d\ %H:%M)"
     DOC_DIR="$(cfg document_dir)"
     if [ -n "$DOC_DIR" ] && [ -d "$DOC_DIR" ]; then
       cp "$PDF_OUT" "$DOC_DIR/$base.pdf"
@@ -58,20 +58,20 @@ case "$cmd" in
     # --prune makes the orchestrator self-clean orphans left by a renamed/moved/
     # deleted source (skips any with unprocessed ink); bare `python mirror.py` stays
     # prune-free. Pass --dry-run after to preview. See mirror.py:prune.
-    "$PY" "$HERE/mirror.py" --prune "${@:2}"
+    "$PY" -m notesync.mirror --prune "${@:2}"
     ;;
 
   run)
     # One-shot "do all due work" pass for a scheduler/heartbeat: due digests ->
     # mirror -> drain EVERY pending annotation (read on your Claude subscription,
     # 3-way merge, apply). Conflicts are left for manual resolution. See run.py.
-    "$PY" "$HERE/run.py" "${@:2}"
+    "$PY" -m notesync.run "${@:2}"
     ;;
 
   repos)
     # Show your cloud source repos + their push state, and print the DOCS_REPOS line for the
     # container's loop.env. Re-run after adding a project — the list maintains itself. See repos.py.
-    "$PY" "$HERE/repos.py" "${@:2}"
+    "$PY" -m notesync.repos "${@:2}"
     ;;
 
   watch)
@@ -79,14 +79,14 @@ case "$cmd" in
     # source .md change -> mirror to device + commit/push ONLY that file (scoped to scan_roots);
     # new device annotation -> read back + 3-way merge. Plus the .laptop-alive heartbeat so the
     # cloud standby defers while this runs. `watch --dry-run` first. See watch.py.
-    "$PY" "$HERE/watch.py" "${@:2}"
+    "$PY" -m notesync.watch "${@:2}"
     ;;
 
   reconcile)
     # 3-way merge the device's edits (device/<rel>, written by Claude from the ink)
     # into the live source. Clean -> --apply writes + re-mirrors; conflicts
     # -> markers in merge_out/ for resolution. See ADR-008.
-    "$PY" "$HERE/reconcile.py" "${@:2}"
+    "$PY" -m notesync.reconcile "${@:2}"
     ;;
 
   process)
@@ -94,15 +94,15 @@ case "$cmd" in
     # via `claude -p`; no key needed) -> device/<rel>, then 3-way merge + apply + re-mirror.
     # Set backend = "api" for the metered Anthropic SDK (then needs ANTHROPIC_API_KEY). $2 = rel.
     rel="${2:?usage: sync.sh process REL [--apply]}"
-    "$PY" "$HERE/read_ink.py" --rel "$rel" || exit 1
-    "$PY" "$HERE/reconcile.py" "$rel" "${@:3}"
+    "$PY" -m notesync.read_ink --rel "$rel" || exit 1
+    "$PY" -m notesync.reconcile "$rel" "${@:3}"
     ;;
 
   in)
     src="${2:-}"
     if [ -z "$src" ]; then
       # "What's new" = docs with a pending .mark sidecar (not just newest in EXPORT).
-      src="$("$PY" "$HERE/pending.py")" || {
+      src="$("$PY" -m notesync.pending)" || {
         echo "Nothing to process — no doc has pending annotations. Annotate a doc and"
         echo "Export-with-annotations on the device first."; exit 1; }
       echo "Pending annotation -> $src"
@@ -120,10 +120,10 @@ case "$cmd" in
     # composite it over the original PDF page for layout context. This replaces the
     # old rasterize-export + red-pixel isolation — no red pen required, exact marks.
     rm -rf "$HERE/checkin_pages"
-    "$PY" "$HERE/marklayer.py" "$mark" --pdf "$pdf" --out "$HERE/checkin_pages"
+    "$PY" -m notesync.marklayer "$mark" --pdf "$pdf" --out "$HERE/checkin_pages"
     # Route the annotated file to its source AND detect laptop-side drift (conflict check).
     echo; echo "Trip-back routing + conflict check:"
-    "$PY" "$HERE/route.py" "$pdf"
+    "$PY" -m notesync.route "$pdf"
     echo
     echo "Next: automated  -> ./sync.sh process <rel> --apply   (reads ink on your Claude subscription + merges)"
     echo "      or manual   -> Claude reads checkin_pages/ink/*.png and writes device/<rel>, then reconcile"
@@ -148,18 +148,18 @@ case "$cmd" in
 
   digest)
     # Generate "daily reading" digests from your recipes (digests/), then mirror to push.
-    "$PY" "$HERE/digest.py" "${2:-}"
+    "$PY" -m notesync.digest "${2:-}"
     ;;
 
   calibrate)
     # Handwriting scribble test. `calibrate` makes the sheet and pushes it to the device;
     # `calibrate read` builds handwriting/QUIRKS.md from a filled sheet's extracted ink.
     if [ "${2:-}" = "read" ]; then
-      "$PY" "$HERE/calibrate.py" read "$HERE/checkin_pages"
+      "$PY" -m notesync.calibrate read "$HERE/checkin_pages"
     else
       mkdir -p "$HERE/out"
       sheet="$HERE/out/handwriting-calibration.pdf"
-      "$PY" "$HERE/calibrate.py" sheet "$sheet"
+      "$PY" -m notesync.calibrate sheet "$sheet"
       DOC_DIR="$(cfg document_dir)"
       if [ -n "$DOC_DIR" ] && [ -d "$DOC_DIR" ]; then
         cp "$sheet" "$DOC_DIR/" && echo "Pushed the calibration sheet to the device. Fill it in, then: ./sync.sh in && ./sync.sh calibrate read"
