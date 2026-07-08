@@ -20,6 +20,9 @@ services:
       - sync-state:/state                  # read-once ledger + digest state (survive restarts)
       - sync-work:/work                    # the docs repo (revertible edits live here)
       - sync-drive:/drive                  # local working copy of the Supernote Drive folder
+    # Cap memory so a runaway sync OOMs inside the container instead of wedging the host
+    # (mirror.py grew to ~3GB and took down the whole ops box, 2026-07-03).
+    mem_limit: 2g
     restart: unless-stopped
 
 volumes:
