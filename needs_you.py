@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-needs_you.py — generate the "Needs You" doc: one card PER PAGE, so it can be read
-**deterministically** (no LLM for the page→item mapping): `format: paged` page-breaks before
-each `##` section. Two kinds of card:
+needs_you.py — generate the "Needs You" doc: a count cover (page 1, glanceable from the file
+thumbnail — the filename stays stable so its Supernote favorite survives), then one card PER
+PAGE, so it can be read **deterministically** (no LLM for the page→item mapping): `format:
+paged` page-breaks before each `##` section. Two kinds of card:
   - conflict QUESTIONS (questions.py): a page that got ink = that merge confirmed.
   - parked IDEAS (ideas.py): a captured bigger-picture item to flesh out; write a destination
     ("priority"/"backlog") and it graduates into the PUNCHLIST.
@@ -19,7 +20,8 @@ import ideas
 import questions
 
 ORDER = config.state_dir() / "needs_you_order.json"   # [{kind, id}, ...] in page order
-_EMPTY = ("---\nformat: notes\n---\n# Needs you\n\n"   # NO device: true ⇒ hidden from the device when empty
+_EMPTY = ("---\nformat: notes\ndevice: true\n---\n# Needs you\n\n"   # device: true even when empty —
+          # hiding-when-empty deleted the device PDF, which broke its Supernote favorite every cycle
           "Nothing needs you right now — all merges were confident and no ideas are parked.\n")
 
 
@@ -46,15 +48,34 @@ def _idea_page(i: dict) -> str:
             "_Your notes:_\n\n")
 
 
+def _cover_page(n_qs: int, n_ideas: int) -> str:
+    """Page 1: the count, big — glanceable from the file's thumbnail without opening it (the
+    filename must stay stable or the device's favorite breaks, so the count lives here)."""
+    n = n_qs + n_ideas
+    parts = ([f"{n_qs} merge question{'s' if n_qs != 1 else ''}"] if n_qs else []) \
+        + ([f"{n_ideas} parked idea{'s' if n_ideas != 1 else ''}"] if n_ideas else [])
+    return (f"# {n} need{'s' if n == 1 else ''} you\n\n"
+            f"{' · '.join(parts)} — one per page, starting on the next page. "
+            "(Ink on this cover does nothing.)\n\n")
+
+
 def build() -> str:
-    """Write the Needs You doc (one card per page) + the page→item order sidecar. Byte-stable:
-    only rewrites the file when content changed (no mirror churn)."""
+    """Write the Needs You doc (a count cover, then one card per page) + the page→item order
+    sidecar. The cover holds a sentinel slot in the sidecar so page N ↔ order[N-1] stays exact
+    (run._process_needs_you ignores non-q/idea kinds). `toc: false` because a "Jump to" block
+    would share the deterministic page grid. Byte-stable: only rewrites the file when content
+    changed (no mirror churn)."""
     open_qs = questions.open_questions()
     open_ideas = ideas.open_ideas()
     pages = [_q_page(q) for q in open_qs] + [_idea_page(i) for i in open_ideas]
     order = ([{"kind": "q", "id": q["id"]} for q in open_qs]
              + [{"kind": "idea", "id": i["id"]} for i in open_ideas])
-    text = ("---\nformat: paged\ndevice: true\n---\n" + "".join(pages)) if pages else _EMPTY
+    if pages:
+        pages.insert(0, _cover_page(len(open_qs), len(open_ideas)))
+        order.insert(0, {"kind": "cover"})
+        text = "---\nformat: paged\ndevice: true\ntoc: false\n---\n" + "".join(pages)
+    else:
+        text = _EMPTY
     ORDER.write_text(json.dumps(order), encoding="utf-8")
     out = config.needs_you()
     out.parent.mkdir(parents=True, exist_ok=True)
