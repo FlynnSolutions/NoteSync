@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -39,7 +40,6 @@ import marks
 import needs_you
 import questions
 import vcs
-from render import render_bytes
 
 # --- config ---------------------------------------------------------------
 BASE = config.source_base()                      # paths are mirrored relative to here
@@ -334,8 +334,14 @@ def main() -> None:
             continue
 
         try:
-            new_bytes = render_bytes(src.read_text(encoding="utf-8"), str(rel),
-                                     questions=questions.for_doc(str(rel)))
+            # Render each doc in a subprocess: fpdf2 leaks ~25MB/doc that never frees in a
+            # long in-process loop, so a full mirror (200+ docs) climbed past 3GB and OOM-
+            # wedged the host. Isolating per doc reclaims that memory on each exit.
+            _hp = str(Path(__file__).resolve().parent / "render_one.py")
+            _p = subprocess.run([sys.executable, _hp, str(src), str(rel)], capture_output=True)
+            if _p.returncode != 0:
+                raise RuntimeError(_p.stderr.decode("utf-8", "replace")[:300] or "render_one failed")
+            new_bytes = _p.stdout
             # Write the PDF ONLY if its bytes actually differ. Rendering is
             # deterministic, so an unchanged doc (even under --force) produces
             # identical bytes -> we don't touch the file -> Google Drive sees no
