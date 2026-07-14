@@ -34,7 +34,7 @@ import questions
 import vcs
 
 HERE = Path(__file__).resolve().parent
-BASE_DIR = HERE / "base"
+BASE_DIR = config.state_dir() / "base"
 DEVICE_DIR = HERE / "device"
 QUIRKS = HERE / "handwriting" / "QUIRKS.md"
 

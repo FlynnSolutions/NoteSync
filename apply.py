@@ -36,7 +36,7 @@ import reconcile
 
 HERE = Path(__file__).resolve().parent
 DEVICE_DIR = HERE / "device"
-MANIFEST = HERE / "manifest.json"
+MANIFEST = config.state_dir() / "manifest.json"
 MATCH_THRESHOLD = 0.45   # below this, a target is treated as UNPLACED rather than mis-placed
 
 

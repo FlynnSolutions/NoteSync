@@ -39,7 +39,7 @@ import reconcile
 
 HERE = Path(__file__).resolve().parent
 PY = sys.executable
-MANIFEST = HERE / "manifest.json"
+MANIFEST = config.state_dir() / "manifest.json"
 CHECKIN = HERE / "checkin_pages"
 
 

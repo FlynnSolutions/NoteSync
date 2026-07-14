@@ -116,9 +116,11 @@ def _is_noise(p: Path) -> bool:
     if name.startswith("LICENSE") or name in {"CODE_OF_CONDUCT.MD", "CONTRIBUTING.MD"}:
         return True
     return any(part.endswith(".dist-info") for part in p.parts)
-MANIFEST = Path(__file__).resolve().parent / "manifest.json"
+# Manifest + base snapshots live in state_dir (defaults to the repo dir; the container
+# points SUPERNOTE_STATE_DIR at its /state volume so a restart doesn't re-render the world).
+MANIFEST = config.state_dir() / "manifest.json"
 # Exact bytes each PDF was rendered from = the merge BASE for conflict-safe check-in.
-BASE_DIR = Path(__file__).resolve().parent / "base"
+BASE_DIR = config.state_dir() / "base"
 
 
 def _gdrive_library() -> Path | None:
@@ -365,10 +367,11 @@ def main() -> None:
 
     if args.dry_run:
         if do_prune and library is not None:
-            # No manifest is rewritten in dry-run, so derive the valid set from the docs
-            # just collected — identical strings to what the manifest would hold.
-            valid = {str(src.relative_to(BASE).with_suffix(".pdf")) for src in docs}
-            prune(library, valid, dry_run=True, force=args.force_prune)
+            # No manifest is rewritten in dry-run, so derive the valid set from the DEVICE
+            # paths just computed (seen_device keys) — identical strings to what the manifest
+            # would hold. Source-rel paths are wrong here: pinned mode flattens them, so
+            # every current PDF would look like an orphan.
+            prune(library, set(seen_device), dry_run=True, force=args.force_prune)
         return
     MANIFEST.write_text(json.dumps(manifest, indent=2))
     # Commit any count-rederives as one revertible restore point in the docs repo.

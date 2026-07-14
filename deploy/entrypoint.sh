@@ -86,15 +86,35 @@ push_repos_up() {
   done
 }
 
-# Self-healing backstop: the rendered Library (Document/Library, fixed by config.library()) is a
-# DERIVED artifact — every PDF is reproducible from the repos — so duplicate names there can never
-# be unique data. A transient error mid-push can make Drive twin a folder (Drive allows same-name
-# siblings), which then blocks the device's sync. Merging identical duplicates each pass clears
-# that automatically. Scoped to Document/Library ONLY — never EXPORT/Note, where your ink lives.
+# The rendered-library namespace on Drive, matching config.library(): SUPERNOTE_LIBRARY_SUBDIR
+# unset -> the "Library" default; explicitly empty -> straight into Document/ (the flattened
+# layout). Set it in loop.env to whatever the laptop's config.toml uses, or the two sides
+# mirror DIFFERENT trees and the device syncs both.
+_lib_sub="${SUPERNOTE_LIBRARY_SUBDIR-Library}"
+LIB_REL="Document${_lib_sub:+/${_lib_sub}}"
+
+# Self-healing backstop: the rendered library is a DERIVED artifact — every PDF is reproducible
+# from the repos — so duplicate names there can never be unique data. A transient error mid-push
+# can make Drive twin a folder (Drive allows same-name siblings), which then blocks the device's
+# sync. Merging identical duplicates each pass clears that automatically. Scoped to the rendered
+# library namespace ONLY — never EXPORT/Note, where your ink lives.
 dedupe_library() {
-  rclone lsf "${REMOTE}/Document/Library" >/dev/null 2>&1 || return 0   # nothing rendered yet
-  rclone dedupe --dedupe-mode newest "${REMOTE}/Document/Library" 2>&1 \
+  rclone lsf "${REMOTE}/${LIB_REL}" >/dev/null 2>&1 || return 0   # nothing rendered yet
+  rclone dedupe --dedupe-mode newest "${REMOTE}/${LIB_REL}" 2>&1 \
     | grep -i 'duplicate' >&2 || true
+}
+
+# Propagate Drive-side DELETIONS into the local working copy for the derived library files
+# (rendered *.pdf + their *.pdf.mark sidecars). Both transfer legs are additive `rclone copy`,
+# so without this a file the laptop prunes from Drive lives on in /drive forever and the next
+# push RESURRECTS it — the device then re-downloads the whole tree every cycle. Runs BEFORE
+# mirror renders (a fresh local render is local-only and a sync here would delete it). The
+# filter keeps it inside the library namespace, and a device-written mark exists remote-side
+# first, so syncing DOWN can never drop unread ink.
+sync_library_down() {
+  rclone lsf "${REMOTE}/${LIB_REL}" >/dev/null 2>&1 || return 0   # nothing rendered yet
+  rclone sync "${REMOTE}/${LIB_REL}" "${SUPERNOTE_ROOT}/${LIB_REL}" \
+    --include "*.pdf" --include "*.pdf.mark"
 }
 
 cd /app
@@ -107,6 +127,7 @@ run_once() {
     return 0
   fi
   rclone copy "$REMOTE" "$SUPERNOTE_ROOT" || { echo "ERROR: rclone pull failed" >&2; rc=1; }
+  sync_library_down || { echo "ERROR: library deletion-sync failed" >&2; rc=1; }
   sync_repos_down
   ./sync.sh run || { echo "ERROR: sync.sh run failed" >&2; rc=1; }
   # Push, then dedupe the derived Library so a partial push never leaves the device blocked.

@@ -22,8 +22,8 @@ from pathlib import Path
 import config
 
 HERE = Path(__file__).resolve().parent
-MANIFEST = HERE / "manifest.json"
-BASE_DIR = HERE / "base"
+MANIFEST = config.state_dir() / "manifest.json"
+BASE_DIR = config.state_dir() / "base"
 
 
 def _sha256(p: Path) -> str:

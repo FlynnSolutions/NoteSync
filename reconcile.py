@@ -39,11 +39,11 @@ import questions
 import vcs
 
 HERE = Path(__file__).resolve().parent
-BASE_DIR = HERE / "base"
+BASE_DIR = config.state_dir() / "base"
 DEVICE_DIR = HERE / "device"
 SNAP_DIR = HERE / "snapshots"
 MERGE_OUT = HERE / "merge_out"
-MANIFEST = HERE / "manifest.json"
+MANIFEST = config.state_dir() / "manifest.json"
 PY = str(HERE / ".venv" / "bin" / "python")
 
 
