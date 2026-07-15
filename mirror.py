@@ -204,11 +204,18 @@ def prune(library: Path, valid: set[str], dry_run: bool, force: bool = False) ->
     deleted) so the user reconciles first — pruning *around* it gutted the tree before, and
     Drive then swept the husk, ink and all. `force=True` (--force-prune) prunes the safe
     orphans anyway, still skipping the pending ones; pending ink is never deleted either way."""
+    keep = list(config.prune_keep())
     safe: list[tuple[str, Path, Path | None]] = []       # (rel, pdf, consumed-mark-or-None)
     pending: list[str] = []
+    kept = 0
     for pdf in sorted(library.rglob("*.pdf")):           # *.pdf.mark ends in .mark, not matched
         rel = str(pdf.relative_to(library))
         if rel in valid:
+            continue
+        # Third-party device docs (config `prune_keep`) live in the library namespace but are
+        # pushed by OTHER systems — no manifest entry, so they'd read as orphans every pass.
+        if any(fnmatch.fnmatch(rel, pat) for pat in keep):
+            kept += 1
             continue
         mark = config.mark_for(pdf)
         if mark.exists() and not marks.is_processed(mark):
@@ -246,6 +253,8 @@ def prune(library: Path, valid: set[str], dry_run: bool, force: bool = False) ->
     removed_dirs = [] if dry_run else _remove_empty_dirs(touched, {library, BASE_DIR})
     verb = "Would prune" if dry_run else "Pruned"
     summary = f"{verb} {len(pruned)} orphan(s)"
+    if kept:
+        summary += f" [kept {kept} matching prune_keep]"
     if pruned:
         summary += ": " + ", ".join(pruned)
     if removed_dirs:

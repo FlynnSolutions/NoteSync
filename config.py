@@ -81,6 +81,16 @@ def mirror_include() -> list[str]:
     return list(_file_cfg().get("mirror_include", []))
 
 
+def prune_keep() -> list[str]:
+    """Glob patterns (matched against the library-relative path) that prune must NEVER touch —
+    device docs some OTHER system drops into the library namespace (e.g. a daily brief pushed
+    by an external agent). They have no manifest entry, so without this every prune would eat
+    them. SUPERNOTE_PRUNE_KEEP (comma-sep) or config `prune_keep`."""
+    if v := os.environ.get("SUPERNOTE_PRUNE_KEEP"):
+        return [r.strip() for r in v.split(",") if r.strip()]
+    return list(_file_cfg().get("prune_keep", []))
+
+
 def mirror_pinned() -> bool:
     """When true, mirror ONLY docs whose frontmatter has `device: true` — a curated device view.
     Everything else stays in the repo as reference (read on the laptop, not shown on the tablet).

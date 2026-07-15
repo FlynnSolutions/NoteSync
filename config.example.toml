@@ -16,6 +16,11 @@ scan_roots = []
 # Set explicitly for other setups (a different cloud, an rclone mount, a Lambda path).
 supernote_root = ""
 
+# Device docs some OTHER system drops into the mirrored library namespace (globs, matched
+# against the library-relative path). They have no manifest entry, so prune would otherwise
+# delete them as orphans on every pass. Example: a daily brief pushed by an external agent.
+# prune_keep = ["hq/MORNING-BRIEF.pdf", "Paperclip/*"]
+
 # Claude model used to read handwriting (needs ANTHROPIC_API_KEY in env or .env).
 model = "claude-opus-4-7"
 
