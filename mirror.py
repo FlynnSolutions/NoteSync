@@ -373,6 +373,11 @@ def main() -> None:
             rendered += 1
         except Exception as e:
             print(f"  FAIL {rel}: {e}", file=sys.stderr)
+            # Keep the doc's previous manifest entry (like PROTECTED does): a transient render
+            # failure must not evict it from the manifest, or the next --prune reads its device
+            # PDF as an orphan and deletes it.
+            if entry:
+                manifest.append(entry)
 
     if args.dry_run:
         if do_prune and library is not None:
