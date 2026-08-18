@@ -69,12 +69,22 @@ elif [ -n "${GITHUB_TOKEN:-}" ]; then
 fi
 
 # Clone (first run) or fast-forward each notes repo into /work/<subpath>.
+# Device pages (CAPTURE.md and friends) are regenerated every pass, so a checkout is
+# perpetually dirty. An --ff-only pull REFUSES when an incoming commit touches one of
+# them, and with the old `|| true` that failure was invisible: hq and imbas each sat
+# wedged for a month (imbas 43 commits behind, 2026-07-21 -> 2026-08-18) while the device
+# kept mirroring stale docs. Discarding is safe because uncommitted == regenerated output:
+# anything worth keeping is committed by vcs.commit_paths during `sync.sh run`. Untracked
+# files are left alone, and a pull that still fails is now LOUD.
 sync_repos_down() {
   local pair sub url dir
   IFS=',' read -ra _repos <<< "$DOCS_REPOS"
   for pair in "${_repos[@]}"; do
     sub="${pair%%=*}"; url="${pair#*=}"; dir="/work/${sub}"
-    if [ -d "$dir/.git" ]; then git -C "$dir" pull --ff-only || true
+    if [ -d "$dir/.git" ]; then
+      git -C "$dir" checkout -- . 2>/dev/null || true   # drop regenerated dirt, keep untracked
+      git -C "$dir" pull --ff-only \
+        || echo "ERROR: pull failed for $sub — it is diverging and the device will go stale" >&2
     else git clone "$url" "$dir" || echo "clone failed: $sub" >&2; fi
   done
 }
